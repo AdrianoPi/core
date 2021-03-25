@@ -1,0 +1,28 @@
+<map id="/home/runner/work/core/core/src/init.c" name="/home/runner/work/core/core/src/init.c">
+<area shape="rect" id="node1" title="Initialization routines." alt="" coords="360,5,537,47"/>
+<area shape="rect" id="node2" href="$io_8h.html" title="Generic input&#45;output facilities." alt="" coords="137,95,216,121"/>
+<area shape="rect" id="node5" href="$thread_8h.html" title="Generic architecture management facilities." alt="" coords="5,95,113,121"/>
+<area shape="rect" id="node6" href="$core_8h.html" title="Core ROOT&#45;Sim functionalities." alt="" coords="488,408,583,435"/>
+<area shape="rect" id="node11" href="$ROOT-Sim_8h.html" title="ROOT&#45;Sim header for model development." alt="" coords="369,483,469,509"/>
+<area shape="rect" id="node14" href="$mpi_8h.html" title="MPI Support Module." alt="" coords="579,95,713,121"/>
+<area shape="rect" id="node20" title=" " alt="" coords="880,408,951,435"/>
+<area shape="rect" id="node22" href="$log_8h.html" title="Logging library." alt="" coords="215,483,293,509"/>
+<area shape="rect" id="node23" href="$stats_8h.html" title="Statistics module." alt="" coords="346,259,437,285"/>
+<area shape="rect" id="node24" href="$parallel_8h.html" title="Concurrent simulation engine." alt="" coords="737,95,873,121"/>
+<area shape="rect" id="node25" href="$serial_8h.html" title="Sequential simulation engine." alt="" coords="393,177,504,203"/>
+<area shape="rect" id="node26" title=" " alt="" coords="948,95,1035,121"/>
+<area shape="rect" id="node3" href="$platform_8h.html" title="Determine on what OS we are compiling." alt="" coords="7,177,130,203"/>
+<area shape="rect" id="node4" title=" " alt="" coords="143,557,210,584"/>
+<area shape="rect" id="node7" title=" " alt="" coords="429,557,492,584"/>
+<area shape="rect" id="node8" title=" " alt="" coords="719,557,789,584"/>
+<area shape="rect" id="node9" title=" " alt="" coords="517,557,599,584"/>
+<area shape="rect" id="node10" title=" " alt="" coords="624,557,695,584"/>
+<area shape="rect" id="node12" title=" " alt="" coords="330,557,405,584"/>
+<area shape="rect" id="node13" title=" " alt="" coords="235,557,305,584"/>
+<area shape="rect" id="node15" href="$control__msg_8h.html" title="MPI remote control messages header." alt="" coords="579,169,721,211"/>
+<area shape="rect" id="node17" href="$msg_8h.html" title="Message management functions." alt="" coords="779,333,857,360"/>
+<area shape="rect" id="node16" href="$gvt_8h.html" title="Global Virtual Time." alt="" coords="570,259,650,285"/>
+<area shape="rect" id="node21" href="$termination_8h.html" title="Termination detection module." alt="" coords="620,333,755,360"/>
+<area shape="rect" id="node18" title=" " alt="" coords="607,408,706,435"/>
+<area shape="rect" id="node19" title=" " alt="" coords="730,408,805,435"/>
+</map>

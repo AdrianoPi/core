@@ -1,0 +1,22 @@
+var searchData=
+[
+  ['schedulenewevent_634',['ScheduleNewEvent',['../ROOT-Sim_8h.html#a00e67e2d468c13b2c10a2d045b0ee988',1,'ROOT-Sim.h']]],
+  ['schedulenewevent_5fserial_635',['ScheduleNewEvent_serial',['../serial_8c.html#aba7e886517e695bd93715663ee44d19f',1,'ScheduleNewEvent_serial(lp_id_t receiver, simtime_t timestamp, unsigned event_type, const void *payload, unsigned payload_size):&#160;serial.c'],['../serial_8h.html#aba7e886517e695bd93715663ee44d19f',1,'ScheduleNewEvent_serial(lp_id_t receiver, simtime_t timestamp, unsigned event_type, const void *payload, unsigned payload_size):&#160;serial.c']]],
+  ['serial_5fsimulation_636',['serial_simulation',['../serial_8c.html#a6bd84cf2a93ff5761c6b0c7a29d9e8a2',1,'serial_simulation(void):&#160;serial.c'],['../serial_8h.html#a6bd84cf2a93ff5761c6b0c7a29d9e8a2',1,'serial_simulation(void):&#160;serial.c']]],
+  ['serial_5fsimulation_5ffini_637',['serial_simulation_fini',['../serial_8c.html#a8d9cf551c2bcbcb22204934267fec9aa',1,'serial.c']]],
+  ['serial_5fsimulation_5frun_638',['serial_simulation_run',['../serial_8c.html#a6c105ca960761ae80fcced499f1034f3',1,'serial.c']]],
+  ['setstate_639',['SetState',['../state_8c.html#aeac670c6c374d28699331ff042e4d2c8',1,'SetState(void *state):&#160;state.c'],['../state_8h.html#aeac670c6c374d28699331ff042e4d2c8',1,'SetState(void *state):&#160;state.c'],['../ROOT-Sim_8h.html#aadf9dfe2d3cfe41ba90ecfd0e210f9fc',1,'SetState(void *new_state):&#160;state.c']]],
+  ['stats_5fdump_640',['stats_dump',['../stats_8c.html#ab4cf7bab1972976b39dd600adc0a52e8',1,'stats_dump(void):&#160;stats.c'],['../stats_8h.html#ab4cf7bab1972976b39dd600adc0a52e8',1,'stats_dump(void):&#160;stats.c']]],
+  ['stats_5ffile_5ffinal_5fwrite_641',['stats_file_final_write',['../stats_8c.html#aad6265c8e3d13d1a2a33bfedc328e46c',1,'stats.c']]],
+  ['stats_5ffiles_5freceive_642',['stats_files_receive',['../stats_8c.html#a74c276975bb07acf2cbc78957abe0c09',1,'stats.c']]],
+  ['stats_5ffiles_5fsend_643',['stats_files_send',['../stats_8c.html#a6275c16d278245bb5eaf1a9302d55e7f',1,'stats.c']]],
+  ['stats_5fglobal_5ffini_644',['stats_global_fini',['../stats_8c.html#aaba9e91afadfd2ef11d623b51487527a',1,'stats_global_fini(void):&#160;stats.c'],['../stats_8h.html#aaba9e91afadfd2ef11d623b51487527a',1,'stats_global_fini(void):&#160;stats.c']]],
+  ['stats_5fglobal_5finit_645',['stats_global_init',['../stats_8c.html#a7239d7313f2bc17c3e8cbecbbd332675',1,'stats_global_init(void):&#160;stats.c'],['../stats_8h.html#a7239d7313f2bc17c3e8cbecbbd332675',1,'stats_global_init(void):&#160;stats.c']]],
+  ['stats_5fglobal_5ftime_5fstart_646',['stats_global_time_start',['../stats_8c.html#a3f10dd99af0532c7131b5d135160e9f8',1,'stats_global_time_start(void):&#160;stats.c'],['../stats_8h.html#a3f10dd99af0532c7131b5d135160e9f8',1,'stats_global_time_start(void):&#160;stats.c']]],
+  ['stats_5fglobal_5ftime_5ftake_647',['stats_global_time_take',['../stats_8c.html#a28c0e0d8c4fc98d68fabeaaf1b30d80d',1,'stats_global_time_take(enum stats_global_type this_stat):&#160;stats.c'],['../stats_8h.html#a28c0e0d8c4fc98d68fabeaaf1b30d80d',1,'stats_global_time_take(enum stats_global_type this_stat):&#160;stats.c']]],
+  ['stats_5finit_648',['stats_init',['../stats_8c.html#aeaa149d6c0445b22e944a063e0884d0d',1,'stats_init(void):&#160;stats.c'],['../stats_8h.html#aeaa149d6c0445b22e944a063e0884d0d',1,'stats_init(void):&#160;stats.c']]],
+  ['stats_5fon_5fgvt_649',['stats_on_gvt',['../stats_8c.html#a9cd0cc6741d6610c0167ebbe7be834af',1,'stats_on_gvt(simtime_t gvt):&#160;stats.c'],['../stats_8h.html#a1bf9bef91fcb5936e159f13e132f4984',1,'stats_on_gvt(simtime_t current_gvt):&#160;stats.c']]],
+  ['stats_5fretrieve_650',['stats_retrieve',['../stats_8c.html#adb675ad829cb6d38dc5fa9c558d6142c',1,'stats_retrieve(enum stats_thread_type this_stat):&#160;stats.c'],['../stats_8h.html#adb675ad829cb6d38dc5fa9c558d6142c',1,'stats_retrieve(enum stats_thread_type this_stat):&#160;stats.c']]],
+  ['stats_5ftake_651',['stats_take',['../stats_8c.html#a5261bbc68e5cc3575f98c019601358e0',1,'stats_take(enum stats_thread_type this_stat, unsigned c):&#160;stats.c'],['../stats_8h.html#a5261bbc68e5cc3575f98c019601358e0',1,'stats_take(enum stats_thread_type this_stat, unsigned c):&#160;stats.c']]],
+  ['sync_5fthread_5fbarrier_652',['sync_thread_barrier',['../sync_8c.html#a3ce4dbfae40245ab4a0636954657fe75',1,'sync_thread_barrier(void):&#160;sync.c'],['../sync_8h.html#a3ce4dbfae40245ab4a0636954657fe75',1,'sync_thread_barrier(void):&#160;sync.c']]]
+];

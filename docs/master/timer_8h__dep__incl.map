@@ -1,0 +1,7 @@
+<map id="/home/runner/work/core/core/src/arch/timer.h" name="/home/runner/work/core/core/src/arch/timer.h">
+<area shape="rect" id="node1" title="Timers." alt="" coords="307,5,484,47"/>
+<area shape="rect" id="node2" href="$gvt_8c.html" title="Global Virtual Time." alt="" coords="5,95,183,136"/>
+<area shape="rect" id="node3" href="$stats_8c.html" title="Statistics module." alt="" coords="207,95,384,136"/>
+<area shape="rect" id="node4" href="$process_8c.html" title="LP state management functions." alt="" coords="408,95,585,136"/>
+<area shape="rect" id="node5" href="$serial_8c.html" title="Sequential simulation engine." alt="" coords="609,95,787,136"/>
+</map>

@@ -1,0 +1,19 @@
+<map id="/home/runner/work/core/core/src/distributed/mpi.h" name="/home/runner/work/core/core/src/distributed/mpi.h">
+<area shape="rect" id="node1" title="MPI Support Module." alt="" coords="439,5,631,47"/>
+<area shape="rect" id="node2" href="$control__msg_8h.html" title="MPI remote control messages header." alt="" coords="411,95,553,136"/>
+<area shape="rect" id="node13" href="$msg_8h.html" title="Message management functions." alt="" coords="551,259,629,285"/>
+<area shape="rect" id="node3" href="$gvt_8h.html" title="Global Virtual Time." alt="" coords="461,184,541,211"/>
+<area shape="rect" id="node17" href="$termination_8h.html" title="Termination detection module." alt="" coords="328,259,463,285"/>
+<area shape="rect" id="node4" href="$core_8h.html" title="Core ROOT&#45;Sim functionalities." alt="" coords="341,333,436,360"/>
+<area shape="rect" id="node5" title=" " alt="" coords="5,483,68,509"/>
+<area shape="rect" id="node6" title=" " alt="" coords="580,483,651,509"/>
+<area shape="rect" id="node7" title=" " alt="" coords="93,483,175,509"/>
+<area shape="rect" id="node8" title=" " alt="" coords="485,483,556,509"/>
+<area shape="rect" id="node9" href="$ROOT-Sim_8h.html" title="ROOT&#45;Sim header for model development." alt="" coords="301,408,401,435"/>
+<area shape="rect" id="node10" title=" " alt="" coords="295,483,370,509"/>
+<area shape="rect" id="node11" title=" " alt="" coords="394,483,461,509"/>
+<area shape="rect" id="node12" title=" " alt="" coords="200,483,271,509"/>
+<area shape="rect" id="node14" title=" " alt="" coords="461,333,559,360"/>
+<area shape="rect" id="node15" title=" " alt="" coords="730,333,805,360"/>
+<area shape="rect" id="node16" title=" " alt="" coords="635,333,705,360"/>
+</map>

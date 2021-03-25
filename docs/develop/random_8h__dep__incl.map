@@ -1,0 +1,17 @@
+<map id="/home/runner/work/core/core/src/lib/random/random.h" name="/home/runner/work/core/core/src/lib/random/random.h">
+<area shape="rect" id="node1" title="Random Number Generators." alt="" coords="1387,5,1604,47"/>
+<area shape="rect" id="node2" href="$lib_8h.html" title="Model library main header." alt="" coords="1319,95,1496,136"/>
+<area shape="rect" id="node10" href="$random_8c.html" title="Random Number Generators." alt="" coords="1787,281,2003,322"/>
+<area shape="rect" id="node3" href="$lib_8c.html" title="Model library main module." alt="" coords="1319,184,1496,225"/>
+<area shape="rect" id="node4" href="$lp_8h.html" title="LP construction functions." alt="" coords="941,184,1119,225"/>
+<area shape="rect" id="node14" href="$parallel_8c.html" title="Concurrent simulation engine." alt="" coords="1569,281,1763,322"/>
+<area shape="rect" id="node15" href="$serial_8c.html" title="Sequential simulation engine." alt="" coords="5,281,183,322"/>
+<area shape="rect" id="node5" href="$msg__queue_8c.html" title="Message queue datatype." alt="" coords="1113,273,1291,329"/>
+<area shape="rect" id="node6" href="$fossil_8c.html" title="Housekeeping operations." alt="" coords="1379,377,1556,419"/>
+<area shape="rect" id="node7" href="$fossil_8h.html" title="Housekeeping operations." alt="" coords="1316,281,1493,322"/>
+<area shape="rect" id="node8" href="$lp_8c.html" title="LP construction functions." alt="" coords="687,377,864,419"/>
+<area shape="rect" id="node9" href="$termination_8c.html" title="Termination detection module." alt="" coords="259,281,452,322"/>
+<area shape="rect" id="node11" href="$state_8c.html" title="LP main state management." alt="" coords="476,281,659,322"/>
+<area shape="rect" id="node12" href="$process_8c.html" title="LP state management functions." alt="" coords="683,281,860,322"/>
+<area shape="rect" id="node13" href="$buddy_8c.html" title="A Buddy System implementation." alt="" coords="884,281,1088,322"/>
+</map>

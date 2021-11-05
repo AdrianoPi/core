@@ -57,6 +57,11 @@ extern void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void
 extern void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id);
 extern void SubscribeAndHandle(lp_id_t subscriber_id, lp_id_t publisher_id, void* data);
 #endif
+// TODO: readd guards
+// For retractable events
+extern void ScheduleRetractableEvent(simtime_t timestamp, unsigned event_type);
+extern void DescheduleRetractableEvent();
+// </readd guards>
 
 extern void SetState(void *new_state);
 
@@ -97,3 +102,21 @@ extern unsigned long long RegionsCount(const struct topology_t *topology);
 extern unsigned long long DirectionsCount(const struct topology_t *topology);
 extern lp_id_t GetReceiver(const struct topology_t *topology, lp_id_t from, enum _direction_t direction);
 extern lp_id_t FindReceiver(const struct topology_t *topology);
+
+/// A set of configurable values used by other modules
+struct simulation_configuration {
+	/// The target termination logical time
+	simtime_t termination_time;
+	/// The gvt period expressed in microseconds
+	unsigned gvt_period;
+	/// The log verbosity level
+	int verbosity;
+	/// The seed used to initialize the pseudo random numbers
+	uint64_t prng_seed;
+	/// If set, worker threads are bound to physical cores
+	bool core_binding;
+	/// If set, the simulation will run on the serial runtime
+	bool is_serial;
+};
+
+extern struct simulation_configuration global_config;

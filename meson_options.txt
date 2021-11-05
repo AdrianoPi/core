@@ -4,3 +4,7 @@ option('iss', type : 'feature', value : 'disabled', description : '')
 option('mpi', type : 'feature', value : 'auto', description : '')
 option('pubsub_msg', type : 'feature', value : 'enabled', description : 
   'allows to use publish/subscribe for event dissemination')
+option('retractable_msg', type : 'feature', value : 'enabled', description : 
+  'allows LPs to each have a single, self-scheduled retractable message')
+option('neural_interface', type : 'feature', value : 'enabled', description : 
+  'Activates neural interface')

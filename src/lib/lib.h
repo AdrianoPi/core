@@ -19,6 +19,13 @@ struct lib_ctx {
 	uint64_t rng_s[4];
 	double unif;
 	bool has_normal;
+
+	// TODO: readd guards
+	// retractability library
+	simtime_t r_ts; // Timestamp of retractable msg
+	uint32_t r_e_type; // Event type
+	//TODO: char* r_payload;
+
 	// todo remove
 	void *state_s;
 };

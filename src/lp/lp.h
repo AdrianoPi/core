@@ -29,6 +29,12 @@ struct lp_ctx {
 	/// The message processing context of this LP
 	struct process_data p;
 
+// TODO: readd guards
+//#ifdef RETRACTABILITY
+	/// Pointer to this LP's retractable message
+	struct lp_msg* r_msg;
+	struct lp_msg* r_msg_padding;
+//#endif
 #ifdef PUBSUB
 	/// Bitmap for subbed nodes
 	struct block_bitmap* subnodes;

@@ -69,6 +69,16 @@ extern void thread_actually_antimessage(struct lp_msg *msg);
 inline void pubsub_insert_in_past(struct lp_msg *msg);
 extern void pubsub_insert_in_past(struct lp_msg *msg);
 
+__attribute((weak)) void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* user_data){
+	(void) me, (void) event, (void) msg_ts, (void) msg_content, (void) size, (void) user_data;
+	return;
+}
+__attribute((weak)) void ProcessPublishedEvent_pr(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* user_data){
+	(void) me, (void) event, (void) msg_ts, (void) msg_content, (void) size, (void) user_data;
+	return;
+
+}
+
 // OK
 void pubsub_module_lp_init(){
 	current_lp->subnodes = mm_alloc(bitmap_required_size(n_nodes));
@@ -841,6 +851,7 @@ inline void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid)
 }
 #endif
 
+#undef current_lid
 
 #undef LP_ID_MSB
 

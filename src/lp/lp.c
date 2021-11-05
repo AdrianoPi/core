@@ -17,6 +17,15 @@
 #include <modules/publish_subscribe/pubsub.h>
 #endif
 
+// TODO: readd guards
+//#ifdef RETRACTABILITY
+#include <modules/retractable/retractable.h>
+//#endif
+
+#ifdef NEURAL
+extern void snn_module_lp_init();
+#endif
+
 uint64_t lid_node_first;
 __thread uint64_t lid_thread_first;
 __thread uint64_t lid_thread_end;
@@ -98,6 +107,25 @@ void lp_init(void)
 
 #ifdef PUBSUB
 		pubsub_module_lp_init();
+#endif
+
+// TODO: readd guards
+//#ifdef RETRACTABILITY
+
+		retractable_lib_lp_init();
+//#endif
+
+#ifdef NEURAL
+	}
+	
+	sync_thread_barrier();
+	// Remember this is called once per thread
+	snn_module_lp_init();
+	
+	sync_thread_barrier();
+
+	for (uint64_t i = lid_thread_first; i < lid_thread_end; ++i) {
+		current_lp = &lps[i];
 #endif
 
 		process_lp_init();

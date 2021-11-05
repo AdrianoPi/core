@@ -26,6 +26,7 @@ void lib_lp_init(void)
 {
 	random_lib_lp_init();
 	state_lib_lp_init();
+
 }
 
 void lib_lp_fini(void)

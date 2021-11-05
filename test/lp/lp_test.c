@@ -43,6 +43,9 @@ void model_allocator_lp_fini(void){ mmem_calls[current_lp - lps]--;}
 void lib_lp_init_pr(void){ lib_calls[current_lp - lps]++;}
 void lib_lp_fini_pr(void){ lib_calls[current_lp - lps]--;}
 
+void retractable_lib_lp_init(void){ lib_calls[current_lp - lps]++;}
+void snn_module_lp_init(void){ lib_calls[current_lp - lps]++;}
+
 void auto_ckpt_lp_init(struct auto_ckpt *auto_ckpt)
 {
 	auto_ckpt_calls[current_lp - lps] += auto_ckpt != NULL;

@@ -13,7 +13,7 @@
 #include <datatypes/array.h>
 #include <lp/msg.h>
 
-extern _Thread_local bool silent_processing;
+extern __thread bool silent_processing;
 
 /// The message processing data produced by the LP
 struct process_data {

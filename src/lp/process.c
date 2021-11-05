@@ -21,6 +21,9 @@
 #include <mm/msg_allocator.h>
 #include <serial/serial.h>
 
+// TODO: readd guards?
+#include <modules/retractable/retractable.h>
+
 __thread bool silent_processing = false;
 static __thread dyn_array(struct lp_msg_remote_match) early_antis;
 
@@ -162,10 +165,15 @@ static inline void silent_execution(const struct process_data *proc_p,
 	silent_processing = true;
 
 	void *state_p = current_lp->lib_ctx_p->state_s;
+
 	do {
 		const struct lp_msg *msg = array_get_at(proc_p->p_msgs, last_i);
 		while (is_msg_sent(msg)) {
 			msg = array_get_at(proc_p->p_msgs, ++last_i);
+		}
+
+		if(unlikely(is_retractable(msg))){
+			DescheduleRetractableEvent();
 		}
 
 		ProcessEvent_pr(
@@ -214,7 +222,15 @@ static inline void send_anti_messages(struct process_data *proc_p,
 
 		int f = atomic_fetch_add_explicit(&msg->flags,
 			-MSG_FLAG_PROCESSED, memory_order_relaxed);
+
 		if (!(f & MSG_FLAG_ANTI)) {
+// TODO: readd guards
+//#ifdef RETRACTABILITY
+			if(unlikely(is_retractable(msg))){
+				msg_allocator_free(msg);
+				continue;
+			}
+//#endif
 			msg_queue_insert(msg);
 			stats_take(STATS_MSG_ROLLBACK, 1);
 		}
@@ -227,6 +243,11 @@ static void do_rollback(struct process_data *proc_p, array_count_t past_i)
 	send_anti_messages(proc_p, past_i);
 	array_count_t last_i = model_allocator_checkpoint_restore(past_i);
 	silent_execution(proc_p, last_i, past_i);
+// TODO: readd guards
+//#ifdef RETRACTABILITY
+
+	retractable_rollback_handle();
+//#endif
 	stats_take(STATS_ROLLBACK, 1);
 }
 
@@ -342,11 +363,26 @@ void process_msg(void)
 	}
 #endif
 
-	gvt_on_msg_extraction(msg->dest_t);
-
 	struct lp_ctx *this_lp = &lps[msg->dest];
 	struct process_data *proc_p = &this_lp->p;
 	current_lp = this_lp;
+
+// TODO: readd guards
+//#ifdef RETRACTABILITY
+
+	bool is_ret = is_retractable(msg);
+
+	// Is the message retractable AND valid?
+	if(unlikely(is_ret)){
+		if(!is_valid_retractable(msg)){
+			msg->dest_t = -1;
+			DescheduleRetractableEvent();// Actually probably not needed
+			return;
+		}
+	}
+//#endif
+
+	gvt_on_msg_extraction(msg->dest_t);
 
 	uint32_t flags = atomic_fetch_add_explicit(&msg->flags,
 			MSG_FLAG_PROCESSED, memory_order_relaxed);
@@ -377,6 +413,16 @@ void process_msg(void)
 		termination_on_lp_rollback(msg->dest_t);
 		auto_ckpt_register_bad(&this_lp->auto_ckpt);
 	}
+
+// TODO: readd guards
+//#ifdef RETRACTABILITY
+
+	// Is the message retractable? We already know that if it is, it's valid
+	if(unlikely(is_ret)){
+		current_lp->r_msg = NULL; // Now the msg is handled by the processedQ
+		DescheduleRetractableEvent();
+	}
+//#endif
 
 	proc_p->last_t = msg->dest_t;
 

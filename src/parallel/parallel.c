@@ -37,6 +37,9 @@ static void worker_thread_init(rid_t this_rid)
 	msg_queue_init();
 	model_allocator_init();
 	sync_thread_barrier();
+	
+	pubsub_module_init();
+	
 	lp_init();
 	process_init();
 

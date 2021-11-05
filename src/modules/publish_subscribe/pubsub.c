@@ -39,7 +39,6 @@
 
 __thread dyn_array(struct lp_msg *) past_pubsubs;
 __thread dyn_array(struct lp_msg *) early_pubsub_antis;
-__thread dyn_array(struct lp_msg *) free_on_gvt_pubsubs;
 
 
 typedef struct table_lp_entry_t{
@@ -60,6 +59,7 @@ t_entry_arr *subscribersTable;
 spinlock_t *tableLocks;
 
 inline void mpi_pubsub_remote_msg_send(struct lp_msg *msg, nid_t dest_nid);
+extern void mpi_pubsub_remote_msg_send(struct lp_msg *msg, nid_t dest_nid);
 inline void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid);
 extern void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid);
 
@@ -68,16 +68,6 @@ extern void thread_actually_antimessage(struct lp_msg *msg);
 
 inline void pubsub_insert_in_past(struct lp_msg *msg);
 extern void pubsub_insert_in_past(struct lp_msg *msg);
-
-__attribute((weak)) void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* user_data){
-	(void) me, (void) event, (void) msg_ts, (void) msg_content, (void) size, (void) user_data;
-	return;
-}
-__attribute((weak)) void ProcessPublishedEvent_pr(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* user_data){
-	(void) me, (void) event, (void) msg_ts, (void) msg_content, (void) size, (void) user_data;
-	return;
-
-}
 
 // OK
 void pubsub_module_lp_init(){
@@ -98,13 +88,13 @@ void pubsub_module_global_init(){
 		array_count(subscribersTable[i])=0; // Unorthodox. Works
 		spin_init(&(tableLocks[i]));
 	}
-
-	array_init(past_pubsubs);
-	array_init(early_pubsub_antis);
-	array_init(free_on_gvt_pubsubs);
 }
 
-// Should be ok?
+void pubsub_module_init(){
+	array_init(past_pubsubs);
+	array_init(early_pubsub_antis);
+}
+
 /// This is called when a local LP publishes a message.
 /// Sends message via MPI, and unpacks local copies.
 void pub_node_handle_published_message(struct lp_msg* msg){
@@ -381,7 +371,8 @@ void thread_handle_published_message(struct lp_msg* msg){
 			void *usr_data = c_lp_entry.data;
 
 			// > Invoke the handler with correct data and lp_id
-			ProcessPublishedEvent_pr(
+			//ProcessPublishedEvent_pr(
+			ProcessPublishedEvent(
 				current_lid,
 				msg->dest_t,
 				msg->m_type,
@@ -811,17 +802,21 @@ void pubsub_on_gvt(simtime_t current_gvt){
 
 /// Adds to past_pubsubs maintaining ordering
 inline void pubsub_insert_in_past(struct lp_msg *msg){
+	if(!array_count(past_pubsubs)){
+		array_push(past_pubsubs, msg);
+		return;
+	}
+
 	array_count_t pos = array_count(past_pubsubs)-1;
 	simtime_t time = msg->dest_t;
 
-	while(time > array_get_at(past_pubsubs, pos)->dest_t && pos > 0){
+	while(time < array_get_at(past_pubsubs, pos)->dest_t && pos > 0){
 		pos--;
 	}
 
 	array_add_at(past_pubsubs, pos, msg);
 }
 
-#ifdef ROOTSIM_MPI
 // OK? Should work provided we use one message buffer per target
 /// Send a pubsub message to dest_nid via MPI, but also use mpi tags
 inline void mpi_pubsub_remote_msg_send(struct lp_msg *msg, nid_t dest_nid)
@@ -849,7 +844,6 @@ inline void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid)
 	MPI_Request_free(&req);
 	mpi_unlock();
 }
-#endif
 
 #undef current_lid
 

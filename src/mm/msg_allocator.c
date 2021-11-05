@@ -60,7 +60,9 @@ struct lp_msg* msg_allocator_alloc(unsigned payload_size)
 		ret->pl_size = payload_size;
 		return ret;
 	}
-	return array_pop(free_list);
+	ret = array_pop(free_list);
+	ret->pl_size = payload_size;
+	return ret;
 }
 
 /**

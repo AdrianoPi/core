@@ -30,12 +30,6 @@ extern bool is_on_curr_node(lp_id_t ID);
 
 inline __neuron_s* fetch_LP_state(lp_id_t ID);
 extern __neuron_s* fetch_LP_state(lp_id_t ID);
-/* Check if synapse going from src_n to dst_n already exists */
-bool synapse_exists(__neuron_s* lp_state, neuron_id_t dst_n);
-void prune_synapses(lp_id_t lp_id);
-void prune_all_synapses();
-unsigned int compact_synapses(lp_id_t lp_id);
-void compact_all_synapses();
 inline __neuron_s* fetch_current_state();
 
 inline void ProcessEvent_pr(lp_id_t me, simtime_t now, unsigned int event, const void* evt_content, unsigned int size, void* lp_state){
@@ -122,6 +116,36 @@ void ProcessEvent(lp_id_t me, simtime_t now, unsigned int event, const void* evt
 	}
 }
 
+//void ProcessPublishedEvent_pr(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* synapse){
+//	ProcessPublishedEvent(me, msg_ts, event, msg_content, size, synapse);
+//}
+
+void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* synapse){
+	switch(event){
+		case SPIKE:
+		{
+			(void) msg_content;
+			(void) size;
+			
+			printdbg("[LP%lu] Received spike at %lf!\n", sender, msg_ts);
+			
+			__syn_t *syn = (__syn_t *) synapse;
+			
+			simtime_t delivery_time = msg_ts + syn->delay;
+			
+			event_t new_event;
+			new_event.value = SynapseHandleSpike_pr(delivery_time, 0, me, syn->data);
+			
+			ScheduleNewEvent_pr(me, delivery_time, SPIKE, &new_event, sizeof(new_event));
+		}
+		
+		default:
+		{
+			break;
+		}
+	}
+}
+
 bool CanEnd(lp_id_t me, const void *snapshot) {
 	if (unlikely(((__neuron_s*)snapshot)->is_probed)){
 		return NeuronCanEnd_pr(me, ((__neuron_s*)snapshot)->neuron_state);
@@ -129,14 +153,12 @@ bool CanEnd(lp_id_t me, const void *snapshot) {
 	return true;
 }
 
-// FIXME
 /* Get the state of the current LP */
 inline __neuron_s* fetch_current_state(){
 	return current_lp->lib_ctx_p->state_s;
 }
 extern __neuron_s* fetch_current_state();
 
-// FIXME
 /* Get the state of lp with id ID, if it belongs to the current node */
 inline __neuron_s* fetch_LP_state(lp_id_t ID){
 	// If LP is on node but managed by another thread... You need to check before
@@ -166,31 +188,10 @@ extern bool is_on_curr_thread(lp_id_t ID);
 
 /* When the neuron wants to send the spike, it calls this */
 void SendSpike(neuron_id_t sender, simtime_t spiketime){
-	printdbg("[LP%lu]SendSpike\n", sender);
-	
-	__neuron_s* state = fetch_current_state();
-	double value;
-	event_t new_event;
-	neuron_id_t target_n;
-	__syn_t *syn;
-	simtime_t delivery_time;
-	
-	printdbg("[LP%lu]Neuron has %lu synapses\n", sender, array_count(state->synapses));
-	for(unsigned long int i=0; i < array_count(state->synapses); i++){
-		
-		syn = array_get_at(state->synapses, i);
-		
-		printdbg("[LP%lu] got synapse %lu. Target: N%lu\n", sender, i, syn->target);
-		
-		target_n = syn->target;
-		
-		delivery_time = spiketime + syn->delay;
-
-		value = SynapseHandleSpike_pr(delivery_time, sender, target_n, syn->data);
-		new_event.value = value;
-		
-		ScheduleNewEvent_pr(target_n, delivery_time, SPIKE, &new_event, sizeof(new_event));
-	}
+	printdbg("[LP%lu]SendSpike: Publishing!\n", sender);
+	(void) sender;
+	PublishNewEvent(spiketime, SPIKE, NULL, 0);
+	return;
 }
 
 /* Neuron calls this when he wants to spike at some time t in the future,
@@ -226,36 +227,43 @@ void* NewSynapse(neuron_id_t src_neuron, neuron_id_t dest_neuron, size_t syn_sta
 	// Maybe check if we can do this, or throw an error
 	//if(neuron_module_topology_init_already_done) *esplodi*;
 	
-	if(!is_on_curr_thread(src_neuron)){// Fall through
-		return NULL;
-	}
-	
 	//~ printdbg("Creating a new synapse from %lu to %lu\n", src_neuron, dest_neuron);
 	
-	__neuron_s* target_lp_state = fetch_LP_state(src_neuron);
-	
-	if (target_lp_state==NULL){// This should not happen
+	__syn_t *synapse = NULL;
+
+	bool src_is_local = is_on_curr_thread(src_neuron);
+	bool dest_is_local = is_on_curr_thread(dest_neuron);
+	if(!src_is_local && !dest_is_local){// Fall through
+		errno = EREMOTE;
 		return NULL;
 	}
 	
-	// Set current_lp to the lp that will manage the synapse so the mm mallocs correctly
-	setCurLP(src_neuron);
-	
-	__syn_t *synapse;
-
-	if(is_static){
-		synapse = mm_alloc(offsetof(__syn_t, data) + syn_state_size);
-	} else {
-		synapse = malloc_mt(offsetof(__syn_t, data) + syn_state_size);
+	if(dest_is_local){
+		
+		if(is_static){
+		
+			synapse = mm_alloc(offsetof(__syn_t, data) + syn_state_size);
+			
+		} else {
+		
+			// As of now, using SubscribeAndHandle to manage synapses means they cannot be dynamic.
+			printf("ERROR: Dynamic synapes are disabled with publish/subscribe. Aborting.");
+			abort();
+						
+			//~ setCurLP(src_neuron);
+			
+		}
 	}
 	
-	synapse->target = dest_neuron;
+	SubscribeAndHandle(dest_neuron, src_neuron, synapse);
+	
+	if(!dest_is_local){
+		errno = EREMOTE;
+		return NULL;
+	}
+	
 	synapse->delay = delay;
-
-	//~ printdbg("NewSyn: Got LP %lu's state\n", src_neuron);
-
-	array_push(target_lp_state->synapses, synapse);
-
+	
 	// Reset current LP to the zeroth of the thread
 	setCurLP(lid_thread_first);
 	
@@ -317,9 +325,6 @@ void snn_module_lp_init(){// Init the neuron memory here (memory manager is up a
 		
 		//~ printdbg("[SNN module] State set\n");
 		
-		//state->synapses = mm_alloc(sizeof(void*) * state->synapse_count);
-		array_init(state->synapses);
-		
 		state->is_probed = 0;
 				
 		state->neuron_state = NeuronInit_pr(lp_id);
@@ -357,78 +362,9 @@ void snn_module_lp_init(){// Init the neuron memory here (memory manager is up a
 	memcpy(ctx->rng_s, prev_rng_s, sizeof(uint64_t)*4);
 	ctx->unif = prev_unif;
 	ctx->has_normal = prev_has_normal;
-
-	//~ // Prune doubled synapses
-	//~ prune_all_synapses();
-	
-	//~ compact_all_synapses();
-	
-	printdbg("[SNN M T%u] Synapses pruned and compacted\n", rid);
 	
 	return;
 }
-
-//~ int cmpsyns(const void* a, const void* b){
-	//~ __syn_t* sa = (__syn_t*) a;
-	//~ __syn_t* sb = (__syn_t*) b;
-	
-	//~ return (sa->target - sb->target);
-	
-//~ }
-
-//~ void prune_all_synapses(){
-	//~ for(lp_id_t lp_id = lid_thread_first; lp_id < lid_thread_end; lp_id++){		
-		//~ prune_synapses(lp_id);
-	//~ }
-//~ }
-
-//~ void prune_synapses(lp_id_t lp_id){
-	//~ // This invokes memory operations. We don't want them to be executed from a different thread than the owner.
-	//~ if(!is_on_curr_thread(lp_id)){
-		//~ printdbg("[prune_synapses] LP%lu is not managed by thread %d\n", lp_id, rid);
-		//~ return;
-	//~ }
-	//~ __neuron_s* state = fetch_LP_state(lp_id);
-	//~ // Sort synapses for faster removal
-	//~ qsort(array_items(state->synapses), array_count(state->synapses), sizeof(__syn_t*), cmpsyns);
-	
-	//~ __syn_t* syn;
-	//~ __syn_t* syn_prev;
-	
-	//~ for(unsigned long int i=1; i < array_count(state->synapses); i++){
-		//~ // i-th and previous synapse
-		//~ syn = array_get_at(state->synapses, i);
-		//~ syn_prev = array_get_at(state->synapses, i-1);
-		
-		//~ if(syn->target == syn_prev->target){
-			//~ // Physically remove synapse
-			//~ array_remove_at(state->synapses, i);
-			//~ i--; // The array has shrunk! We want the same i next iteration
-		//~ }
-	//~ }
-//~ }
-
-//~ void compact_all_synapses(){
-	//~ unsigned int saved = 0;
-	//~ for(lp_id_t lp_id = lid_thread_first; lp_id < lid_thread_end; lp_id++){
-		//~ saved += compact_synapses(lp_id);
-	//~ }
-	
-	//~ printf("Saved %u slots by compacting\n", saved);
-//~ }
-
-//~ unsigned int compact_synapses(lp_id_t lp_id){
-	//~ // This invokes memory operations. We don't want them to be executed from a different thread than the owner.
-	//~ if(!is_on_curr_thread(lp_id)){
-		//~ printdbg("[compact_synapses] LP%lu is not managed by thread %d\n", lp_id, rid);
-		//~ return 0;
-	//~ }
-	//~ __neuron_s* state = fetch_LP_state(lp_id);
-	//~ unsigned int initial_size = array_capacity(state->synapses);
-	//~ array_compact(state->synapses);
-	//~ return initial_size - array_capacity(state->synapses);
-//~ }
-
 
 /* This is a ScheduleNewEvent for spikes that do not originate from an LP (e.g. spiketrains).
  * Scheduling a message for an LP that lies on a different node = bad bad. Be careful using this */

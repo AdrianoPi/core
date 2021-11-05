@@ -74,7 +74,6 @@ extern void SNNInitTopology_pr(neuron_id_t n_neurons);
 /* </INTERFACES> */
 
 typedef struct __syn_t{
-	lp_id_t target;
 	simtime_t delay;
 	unsigned char data[];
 } __syn_t;
@@ -84,7 +83,6 @@ typedef struct mbspk_str {
 } mbspk_str;
 
 typedef struct __neuron_s{
-	dyn_array(__syn_t *) synapses;
 	void* neuron_state;
 	bool is_probed;
 } __neuron_s;

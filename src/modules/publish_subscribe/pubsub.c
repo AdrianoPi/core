@@ -140,7 +140,7 @@ void pub_node_handle_published_message(struct lp_msg* msg){
 			if (bitmap_check(subs, dest_nid)) {
 
 				struct lp_msg *mpi_msg = msg_allocator_alloc(
-						n_stripped_payload_size(msg));
+							blueprint_msg->pl_size);
 				memcpy(mpi_msg, blueprint_msg, blueprint_msg_size);
 
 				children_ptr(msg)[it] = mpi_msg;
@@ -154,7 +154,7 @@ void pub_node_handle_published_message(struct lp_msg* msg){
 
 #endif
 
-	if(!array_count(threads)){ // The entry of the publisher LP does not exist
+	if(!array_count(threads)){ // The entry of the publisher LP is empty
 		atomic_fetch_add_explicit(&msg->flags, MSG_FLAG_PROCESSED, memory_order_relaxed);
 		return;
 	}
@@ -265,8 +265,8 @@ static inline bool check_early_anti_pubsub_messages(struct lp_msg *msg)
 	if (likely(!array_count(early_pubsub_antis) || !(m_id = msg->raw_flags >> MSG_FLAGS_BITS)))
 		return false;
 	uint32_t m_seq = msg->m_seq;
-	if (!m_id)
-		return false;
+//	if (!m_id) // Already checked above
+//		return false;
 	for (array_count_t i = 0; i < array_count(early_pubsub_antis); ++i) {
 		struct lp_msg *a_msg = array_get_at(early_pubsub_antis, i);
 		if (a_msg->raw_flags == m_id && a_msg->m_seq == m_seq) {
@@ -315,7 +315,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 			pubsub_msg_free(mark_as_thread_lv(msg));
 		} else {
 			// Cannot just free because antimessaging could happen
-			pubsub_insert_in_past(msg);
+			pubsub_insert_in_past(mark_as_thread_lv(msg));
 		}
 		return;
 	}
@@ -325,7 +325,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 	// Byte offsets	:v-0    v-og_pl_size	v-(pl_size+sizeof(void*))	
 	// Contents	:[ pl	| &lp_arr	| childCount	| lp_msg**	]
 
-	// Here create the payload for the messages LPs will receive
+	// Here calculate the size of the payload for the messages LPs will receive
 	size_t original_pl_size = t_stripped_payload_size(msg);
 
 	struct lp_msg* child_msg;
@@ -358,7 +358,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 
 			atomic_store_explicit(&child_msg->flags, 0U, memory_order_relaxed);
 
-			msg_queue_insert(msg);
+			msg_queue_insert(child_msg);
 
 		} else { // SubscribeAndHandle
 			// Set the current LP to the target lp's id
@@ -402,7 +402,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 		return;
 	}
 
-	pubsub_insert_in_past(msg);
+	pubsub_insert_in_past(mark_as_thread_lv(msg));
 }
 
 // ok
@@ -439,6 +439,8 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 // Ok?
 /// This carries out the antimessaging when the node received the antimessage via MPI
 void sub_node_handle_published_antimessage(struct lp_msg *msg){
+	// FIXME: is the usage of flags disruptive for the mpi organization??
+
 	// On sub nodes, just create thread-level copies
 	t_entry_arr threads = subscribersTable[msg->dest];
 
@@ -526,27 +528,35 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg){
 	}
 }
 
-static inline array_count_t match_remote_pubsub_msg(const struct lp_msg *r_msg)
+/// Gets the positive message matching a_msg by removing it from past_pubsubs.
+static inline struct lp_msg* get_positive_pubsub_msg(const struct lp_msg *a_msg)
 {
-	uint32_t m_id = r_msg->raw_flags >> MSG_FLAGS_BITS, m_seq = r_msg->m_seq;
-	array_count_t past_i = array_count(past_pubsubs) - 1;
-	while (past_i) {
-		struct lp_msg *msg = array_get_at(past_pubsubs, past_i);
-		if (msg->raw_flags >> MSG_FLAGS_BITS == m_id && msg->m_seq == m_seq) {
+	uint32_t m_id = a_msg->raw_flags >> MSG_FLAGS_BITS, m_seq = a_msg->m_seq;
+	array_count_t past_i = 0;
+	array_count_t ct = array_count(past_pubsubs);
+	while (past_i<ct) {
+		struct lp_msg *msg = unmark_msg(array_get_at(past_pubsubs, past_i));
+		if ((msg->raw_flags >> MSG_FLAGS_BITS) == m_id && msg->m_seq == m_seq) {
 			msg->raw_flags |= MSG_FLAG_ANTI;
-			break;
+
+			// TODO: is it better to free while antimessaging
+			//  or letting the fossil collector free it later?
+			// Prevents double free
+			array_remove_at(past_pubsubs, past_i);
+
+			return msg;
 		}
-		--past_i;
+		past_i++;
 	}
 
-	return past_i;
+	return NULL;
 }
 
 // This is called when a pubsub message with ANTI flag set is extracted
 void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 
-	// Check whether it comes from publisher local to node
-	if (!anti_msg->flags >> MSG_FLAGS_BITS) {
+	// Is the publisher local to node
+	if (!(anti_msg->flags >> MSG_FLAGS_BITS)) {
 		if (anti_msg->flags & MSG_FLAG_PROCESSED){
 			thread_actually_antimessage(anti_msg);
 		} else {
@@ -557,8 +567,8 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 	}
 
 	// Did we process the positive copy of this message already?
-	array_count_t past_i = match_remote_pubsub_msg(anti_msg);
-	if (unlikely(!past_i)) {
+	struct lp_msg *msg = get_positive_pubsub_msg(anti_msg);
+	if (unlikely(!msg)) {
 		// No, store for later
 		anti_msg->raw_flags >>= MSG_FLAGS_BITS;
 		array_push(early_pubsub_antis, anti_msg);
@@ -568,10 +578,9 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 	// We did
 	msg_allocator_free(anti_msg);
 
-	// Prevents double free
-	struct lp_msg *msg = array_remove_at(past_pubsubs, past_i);
-
 	thread_actually_antimessage(msg);
+	// TODO: is it better to free while antimessaging
+	//  or letting the fossil collector free it later?
 	pubsub_msg_free(mark_as_thread_lv(msg));
 }
 
@@ -753,7 +762,14 @@ inline void pubsub_msg_free(struct lp_msg* p_msg){
 	if(c_ptr){
 		// If Node-level, free the MPI children
 		if(!is_thread_lv(p_msg)){
-			int ct = current_lp->n_remote_sub_nodes;
+			// FIXME: this shouldn't need to check if current_lp is not null every time!
+			//  But currently needed to avoid crashing upon cleaning up.
+			int ct;
+			if(likely(current_lp)){
+				ct = current_lp->n_remote_sub_nodes;
+			} else {
+				ct = 0;
+			}
 			for(int i = 0; i < ct; i++){
 				msg_allocator_free(c_ptr[i]);
 			}
@@ -791,7 +807,7 @@ void pubsub_on_gvt(simtime_t current_gvt){
 
 	for(i=0; i<ct; i++){
 		struct lp_msg *msg = array_get_at(past_pubsubs, i);
-		if(msg->dest_t >= current_gvt){
+		if(unmark_msg(msg)->dest_t >= current_gvt){
 			break;
 		}
 		pubsub_msg_free(msg);
@@ -802,19 +818,40 @@ void pubsub_on_gvt(simtime_t current_gvt){
 
 /// Adds to past_pubsubs maintaining ordering
 inline void pubsub_insert_in_past(struct lp_msg *msg){
-	if(!array_count(past_pubsubs)){
+
+	simtime_t time = unmark_msg(msg)->dest_t;
+
+	int size = array_count(past_pubsubs);
+	if(!size) {
 		array_push(past_pubsubs, msg);
 		return;
 	}
 
-	array_count_t pos = array_count(past_pubsubs)-1;
-	simtime_t time = msg->dest_t;
-
-	while(time < array_get_at(past_pubsubs, pos)->dest_t && pos > 0){
-		pos--;
+	if(time >= unmark_msg(array_peek(past_pubsubs))->dest_t){
+		array_push(past_pubsubs, msg);
+		return;
 	}
 
-	array_add_at(past_pubsubs, pos, msg);
+	// Binary search the position
+	int min = 0;
+	int max = size-2;
+
+	int next;
+	simtime_t curr_t;
+	do {
+		next = (max+min)/2;
+		curr_t = unmark_msg(array_get_at(past_pubsubs, next))->dest_t;
+		if (time < curr_t){
+			max = next-1;
+		} else if (time > curr_t) {
+			min = next+1;
+		} else { // Found an acceptable position
+			array_add_at(past_pubsubs, next, msg);
+			return;
+		}
+	} while( max >= min );
+
+	array_add_at(past_pubsubs, min, msg);
 }
 
 // OK? Should work provided we use one message buffer per target

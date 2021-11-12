@@ -226,7 +226,6 @@ void mpi_remote_msg_handle(void)
 		}
 
 #ifdef PUBSUB
-		// TODO: add handling for PubSub messages!!
 		if(status.MPI_TAG == MSG_PUBSUB){
 			int size;
 			MPI_Get_count(&status, MPI_BYTE, &size);
@@ -237,11 +236,13 @@ void mpi_remote_msg_handle(void)
 						  MPI_STATUS_IGNORE);
 				mpi_unlock();
 
+				// This also sets ANTI flag
 				gvt_remote_anti_msg_receive(msg);
+				msg->raw_flags |= MSG_FLAG_PUBSUB;
 				sub_node_handle_published_antimessage(msg);
 			} else {
 				msg = msg_allocator_alloc(size -
-										  offsetof(struct lp_msg, pl));
+					offsetof(struct lp_msg, pl));
 				MPI_Mrecv(msg, size, MPI_BYTE, &mpi_msg,
 						  MPI_STATUS_IGNORE);
 				mpi_unlock();

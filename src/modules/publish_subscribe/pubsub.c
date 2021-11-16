@@ -130,6 +130,7 @@ void pub_node_handle_published_message(struct lp_msg* msg){
 		size_t blueprint_msg_size = offsetof(struct lp_msg, pl) + n_stripped_payload_size(msg);
 		memcpy(blueprint_msg, msg, blueprint_msg_size);
 		blueprint_msg->pl_size = n_stripped_payload_size(msg);
+		blueprint_msg->flags = 0;
 
 		for (int dest_nid=0; it<ct; dest_nid++){
 
@@ -217,8 +218,7 @@ void sub_node_handle_published_message(struct lp_msg* msg){
 		return;
 	}
 
-	size_t child_pl_size = 	n_stripped_payload_size(msg) +
-							  size_of_thread_pubsub_info;
+	size_t child_pl_size = msg->pl_size + size_of_thread_pubsub_info;
 	// Visualization of child's payload once populated:
 	// Offsets	:	v-0       		v-msg->pl_size
 	// Contents	:	[ 	*(msg->pl) 	| 	lp_arr* |	childCount	| lp_msg**	]
@@ -467,6 +467,7 @@ void sub_node_handle_published_antimessage(struct lp_msg *msg){
 		pubsub_msg_queue_insert(child_msg);
 	}
 
+	msg->flags = MSG_FLAG_ANTI;
 	/* This msg is only a blueprint: Free it right now */
 	msg_allocator_free(msg);
 
@@ -753,6 +754,10 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 // Free a pubsub msg
 inline void pubsub_msg_free(struct lp_msg* p_msg){
 
+	// FIXME: remove this. Find a better way to deal with cleaning up.
+	if(unlikely(!current_lp)){
+		return;
+	}
 	struct lp_msg *msg = unmark_msg(p_msg);
 	// Works for both node and thread-level
 	struct lp_msg **c_ptr = children_ptr(msg);

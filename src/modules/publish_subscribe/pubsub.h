@@ -18,6 +18,7 @@
 extern void pubsub_module_lp_init(void);
 extern void pubsub_module_init(void);
 extern void pubsub_module_global_init(void);
+extern void pubsub_module_global_fini(void);
 extern void pubsub_on_gvt(simtime_t current_gvt);
 
 /// Send an Event to all the subscribed LPs.

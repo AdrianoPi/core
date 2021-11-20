@@ -69,6 +69,9 @@ extern void thread_actually_antimessage(struct lp_msg *msg);
 inline void pubsub_insert_in_past(struct lp_msg *msg);
 extern void pubsub_insert_in_past(struct lp_msg *msg);
 
+void pprint_subscribers_table();
+void pprint_subscribers_adjacency_list();
+
 // OK
 void pubsub_module_lp_init(){
 	current_lp->subnodes = mm_alloc(bitmap_required_size(n_nodes));
@@ -88,6 +91,31 @@ void pubsub_module_global_init(){
 		array_count(subscribersTable[i])=0; // Unorthodox. Works
 		spin_init(&(tableLocks[i]));
 	}
+}
+
+
+/// Last call to the pubsub module
+void pubsub_module_global_fini(){
+	// Right now just prints two json files:
+	// One is the subscribers table
+	// The other is an array that at index i contains the list of subscribers of LP i.
+	// Each MPI node prints its file containing its portion of the information
+#if LOG_LEVEL <= LOG_DEBUG
+	FILE *f;
+	char* fname = malloc(strlen("SubscribersTable_.json") + 100);
+	sprintf(fname, "SubscribersTable_%d.json", nid);
+	f = fopen(fname, "w");
+	free(fname);
+	pprint_subscribers_table(f);
+	fclose(f);
+
+	fname = malloc(strlen("SubscribersAdjacencyList_.json") + 100);
+	sprintf(fname, "SubscribersAdjacencyList_%d.json", nid);
+	f = fopen(fname, "w");
+	free(fname);
+	pprint_subscribers_adjacency_list(f);
+	fclose(f);
+#endif
 }
 
 void pubsub_module_init(){
@@ -885,6 +913,90 @@ inline void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid)
 		dest_nid, MSG_PUBSUB, MPI_COMM_WORLD, &req);
 	MPI_Request_free(&req);
 	mpi_unlock();
+}
+
+void pprint_table_lp_entry_t(table_lp_entry_t e, FILE *f){
+	fprintf(f, "%lu", e.lid);
+}
+
+//typedef dyn_array(table_lp_entry_t) lp_entry_arr;
+void pprint_lp_entry_arr(lp_entry_arr a, FILE *f){
+	// è un dyn_array di table_lp_entry_t
+	size_t ct = array_count(a);
+	fprintf(f, "[");
+	for(size_t i=0; i<ct; i++){
+		pprint_table_lp_entry_t(array_get_at(a, i), f);
+		if(i+1<ct) fprintf(f, ", ");
+	}
+	fprintf(f, "]\n");
+}
+
+void pprint_table_thread_entry_t(table_thread_entry_t e, FILE *f){
+	fprintf(f, "\t\t");
+	fprintf(f, "{\n");
+	fprintf(f, "\t\t\t\"Tid\": %u,\n\t\t\t\"LP_arr\": ", e.tid);
+	pprint_lp_entry_arr(e.lp_arr, f);
+	fprintf(f, "\t\t");
+	fprintf(f, "}");
+}
+
+void pprint_t_entry_arr(t_entry_arr a, FILE *f){
+	fprintf(f, "\t");
+	fprintf(f, "[\n");
+	// è un dyn_array di table_thread_entry_t
+	size_t ct = array_count(a);
+	for(size_t i=0; i<ct; i++){
+		pprint_table_thread_entry_t(array_get_at(a, i), f);
+		if(i+1<ct) fprintf(f, ",");
+		fprintf(f, "\n");
+	}
+	fprintf(f, "\t");
+	fprintf(f, "]");
+}
+
+// Print the table to a file
+void pprint_subscribers_table(FILE *f){
+	t_entry_arr *t = subscribersTable;
+	fprintf(f, "[\n");
+	// Size of t: n_lps;
+	for(lp_id_t i=0; i<n_lps; i++){
+		//Entry dei sub dell'LP con id "i": t[i];
+		pprint_t_entry_arr(t[i], f);
+		if(i+1<n_lps) fprintf(f, ",");
+		fprintf(f, "\n");
+	}
+	fprintf(f, "]\n");
+}
+
+void pprint_subscribers_adjacency_list(FILE *f){
+	// Subscribers table
+	t_entry_arr *t = subscribersTable;
+	fprintf(f, "[\n");
+	// Size of t: n_lps;
+	for(lp_id_t pub_id=0; pub_id<n_lps; pub_id++){
+		// Working with subscribers table entries, which are dyn_arrays of t_entry
+		t_entry_arr t_entry_arr = t[pub_id];
+
+		fprintf(f, "\t[");
+
+		size_t t_ct = array_count(t_entry_arr);
+		for(size_t t_i=0; t_i<t_ct; t_i++){
+			//Now we get the lp_arr in t_entry, which are dyn_arrays of lp_entry
+			lp_entry_arr lp_arr = array_get_at(t_entry_arr, t_i).lp_arr;
+
+			size_t lp_ct = array_count(lp_arr);
+			for(size_t l_i=0; l_i<lp_ct; l_i++){
+				fprintf(f, "%lu", array_get_at(lp_arr, l_i).lid);
+				if(t_i+1<t_ct || l_i+1<lp_ct) fprintf(f, ", ");
+			}
+
+		}
+
+		fprintf(f, "]");
+		if(pub_id+1<n_lps) fprintf(f, ",");
+		fprintf(f, "\n");
+	}
+	fprintf(f, "]\n");
 }
 
 #undef current_lid

@@ -122,6 +122,7 @@ static void parallel_global_init(void)
 static void parallel_global_fini(void)
 {
 	msg_queue_global_fini();
+	pubsub_module_global_fini();
 	lp_global_fini();
 	process_global_fini();
 	lib_global_fini();

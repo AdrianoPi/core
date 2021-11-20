@@ -365,7 +365,11 @@ void GatherStatistics(simtime_t now, unsigned long int neuron_id, const neuron_s
 	if(neuron_id >= 77169) {return;}//Poisson neuron
 
 	if(outFile == NULL){//First neuron to write. Open file and write
-		outFile = fopen("Shimoura18Run", "w");
+		char* fname = malloc(strlen("Shimoura18Run_") + 10);
+		sprintf(fname, "Shimoura18Run_%lu", neuron_id);
+//		sprintf(fname + strlen("Shimoura18Run_"), "%lu", neuron_id);
+		outFile = fopen(fname, "w");
+		free(fname);
 	}
 	
 	fprintf(outFile, "N%lu, s%lu\n", neuron_id, state->times_fired);

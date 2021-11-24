@@ -201,11 +201,16 @@ void pub_node_handle_published_message(struct lp_msg* msg){
 		table_thread_entry_t *t_entry = &array_get_at(threads, c);
 
 		struct lp_msg *child_msg = msg_allocator_alloc(child_pl_size);
+		// TODO: memcpy msg, and then change dest and pl_size?
 		// Target is the target thread's tid
 		child_msg->dest = t_entry->tid;
 		child_msg->dest_t = msg->dest_t;
 		child_msg->m_type = msg->m_type;
 		child_msg->pl_size = child_pl_size;
+#if LOG_LEVEL <= LOG_DEBUG
+		child_msg->send = msg->send;
+		child_msg->send_t = msg->send_t;
+#endif
 
 		memcpy(child_msg->pl, msg->pl, n_stripped_payload_size(msg));
 		t_lp_arr(child_msg) = &(t_entry->lp_arr);
@@ -263,6 +268,10 @@ void sub_node_handle_published_message(struct lp_msg* msg){
 		child_msg->dest_t = msg->dest_t;
 		child_msg->m_type = msg->m_type;
 		child_msg->pl_size = child_pl_size;
+#if LOG_LEVEL <= LOG_DEBUG
+		child_msg->send = msg->send;
+		child_msg->send_t = msg->send_t;
+#endif
 
 		memcpy(child_msg->pl, msg->pl, msg->pl_size);
 		t_lp_arr(child_msg) = &(t_entry->lp_arr);
@@ -383,6 +392,10 @@ void thread_handle_published_message(struct lp_msg* msg){
 					msg->pl,
 					original_pl_size
 			);
+#if LOG_LEVEL <= LOG_DEBUG
+			child_msg->send = msg->send;
+			child_msg->send_t = msg->send_t;
+#endif
 
 			atomic_store_explicit(&child_msg->flags, 0U, memory_order_relaxed);
 
@@ -413,7 +426,10 @@ void thread_handle_published_message(struct lp_msg* msg){
 
 			// Pop the created message from sent_msgs
 			child_msg = unmark_msg(array_pop(proc_p->p_msgs));
-
+#if LOG_LEVEL <= LOG_DEBUG
+			child_msg->send = msg->send;
+			child_msg->send_t = msg->send_t;
+#endif
 		}
 
 		// Keep track of the child message
@@ -451,6 +467,10 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 	msg->dest = current_lid;
 	msg->dest_t = timestamp;
 	msg->m_type = event_type;
+#if LOG_LEVEL <= LOG_DEBUG
+	msg->send = current_lid;
+	msg->send_t = proc_p->last_t;
+#endif
 
 	if(payload_size){
 		memcpy(msg->pl, payload, payload_size);

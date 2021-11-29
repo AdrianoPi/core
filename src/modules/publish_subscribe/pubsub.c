@@ -488,7 +488,11 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 /// This carries out the antimessaging when the node received the antimessage via MPI
 void sub_node_handle_published_antimessage(struct lp_msg *msg){
 	// FIXME: is the usage of flags disruptive for the mpi organization??
-
+	printf("ANTIMESSAGE RECEIVED from %lu at TIME %lf\n", msg->dest, msg->dest_t);
+	for(int k = 1000000; k>0; k--){
+		continue;
+	}
+	fflush(stdout);
 	// On sub nodes, just create thread-level copies
 	t_entry_arr threads = subscribersTable[msg->dest];
 

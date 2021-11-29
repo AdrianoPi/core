@@ -19,12 +19,15 @@
 #define I_TOLERANCE 0.01	//pA
 #define T_TOLERANCE 0.001	//mS
 
-#define e_portion 0.8f
+//#define e_portion 0.8f
+#define e_portion 0.5f
 
 #define g_El -49.0f			//mV
 #define g_we (60*0.27f/10)	//pA
 #define g_wi (-20*4.5f/10)	//pA
 #define g_syn_delay 1.0f	//mS
+
+#define SPIKE_MAX 10
 
 unsigned long long int syn_ct = 0;
 
@@ -78,8 +81,10 @@ static struct neuron_helper_t n_helper_p[2];
 
 /* NETWORK PARAMETERS v*/
 //~ Probability connection table
-double table[2][2]={{0.02,  0.02},\
-					{0.02,  0.02}};
+/*double table[2][2]={{0.02,  0.02},\
+					{0.02,  0.02}};*/
+double table[2][2]={{0,  1.0},\
+					{1.0,  0}};
 /* END NETWORK PARAMETERS ^ */
 
 FILE* outFile = NULL;
@@ -109,6 +114,10 @@ neuron_state_t* InitExpLIFNeuron(unsigned long int me){
 		
 		n_helper->self_spike_time = getSelfSpikeTime(n_helper);
 		printf("Neuron population %d self spike time: %lf\n", pop, n_helper->self_spike_time);
+		for(int k = 1000000; k>0; k--){
+			continue;
+		}
+		fflush(stdout);
 	}
 	
 	state->helper = n_helper;
@@ -203,6 +212,7 @@ bool NeuronCanEnd(unsigned long int me, neuron_state_t* state){
 	//~ if(state->times_fired >= SPIKE_MAX){
 		//~ printdbg("[N%lu] Spikes: %lu, CanEnd!!!\n", me, state->times_fired);
 	//~ }
+//	printf("[CanEnd N%lu] Neuron has fired %lu times. Last fire time: %lf\n", me, state->times_fired, state->last_fired);
 	
 	//~ return (state->times_fired >= SPIKE_MAX);
 	return false;
@@ -210,22 +220,29 @@ bool NeuronCanEnd(unsigned long int me, neuron_state_t* state){
 
 
 void ProbeRead(simtime_t now, unsigned long int monitored_neuron, const neuron_state_t* neuron_state){
-	//~ printf("[Probe N%lu] Neuron has fired %lu times at time %lf\n", monitored_neuron, neuron_state->times_fired, now);
+	printf("[Probe N%lu] Neuron has fired %lu times at time %lf\n", monitored_neuron, neuron_state->times_fired, now);
+	for(int k = 1000000; k>0; k--){
+		continue;
+	}
+	fflush(stdout);
 	return;
 }
 
 
 void GatherStatistics(simtime_t now, unsigned long int neuron_id, const neuron_state_t* state){	
 	//TODO: Fill this in to gather statistics and print them to file
-	double spike_frequency = 1000 * state->times_fired/now;
+//	double spike_frequency = 1000 * state->times_fired/now;
 	//~ double spike_freq_till_last = state->times_fired/state->last_updated;
-	
+
 	if(outFile == NULL){//First neuron to write. Open file and write
-		outFile = fopen("CUBARun", "w");
+		char* fname = malloc(strlen("CUBARun_t_") + 100);
+		sprintf(fname, "CUBARun_t%llu_%lu", (unsigned long long) MODEL_MAX_SIMTIME, neuron_id);
+		outFile = fopen(fname, "w");
+		free(fname);
 	}
 	
-	fprintf(outFile, "N%lu, f%lf\n", neuron_id, spike_frequency);
-	
+//	fprintf(outFile, "N%lu, f%lf\n", neuron_id, spike_frequency);
+	fprintf(outFile, "N%lu, s%lu\n", neuron_id, state->times_fired);
 }
 
 
@@ -276,7 +293,8 @@ void CUBATopology(unsigned long int neuron_count){
 		}
 	}
 	NewProbe(0);
-	
+	NewProbe(1);
+
 	printdbg("Total number of synapses: %llu\n", syn_ct);
 	
 	

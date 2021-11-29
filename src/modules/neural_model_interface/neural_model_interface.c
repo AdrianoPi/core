@@ -71,8 +71,8 @@ void ProcessEvent(lp_id_t me, simtime_t now, unsigned int event, const void* evt
 			// Framework-provided retractable messages -> valid
 			printdbg("[F - MS N%lu] Spiking!\n", me);
 			SendSpike(me, now);
-			
-			if(state->is_probed){
+
+			if(state->is_probed && !silent_processing){
 				printdbg("[F - MS N%lu] Neuron is probed\n", me);
 				ProbeRead_pr(now, me, state->neuron_state);
 			}
@@ -89,7 +89,7 @@ void ProcessEvent(lp_id_t me, simtime_t now, unsigned int event, const void* evt
 			printdbg("[F - MSW N%lu] Waking neuron\n", me);
 			NeuronWake_pr(me, now, state->neuron_state);
 			
-			if(state->is_probed){
+			if(state->is_probed && !silent_processing){
 				printdbg("[F - MSW N%lu] Neuron is probed\n", me);
 				ProbeRead_pr(now, me, state->neuron_state);
 			}
@@ -128,13 +128,15 @@ void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, con
 			(void) size;
 			
 			printdbg("[LP%lu] Received spike at %lf!\n", sender, msg_ts);
-			
+
 			__syn_t *syn = (__syn_t *) synapse;
 			
 			simtime_t delivery_time = msg_ts + syn->delay;
 			
 			event_t new_event;
 			new_event.value = SynapseHandleSpike_pr(delivery_time, 0, me, syn->data);
+
+			printdbg("[LP%lu] Received spike at %lf for time %lf with value %lf!\n", me, msg_ts, delivery_time, new_event.value);
 			
 			ScheduleNewEvent_pr(me, delivery_time, SPIKE, &new_event, sizeof(new_event));
 		}
@@ -348,7 +350,11 @@ void snn_module_lp_init(){// Init the neuron memory here (memory manager is up a
 	memcpy(prev_rng_s, ctx->rng_s, sizeof(uint64_t)*4);
 	prev_unif = ctx->unif;
 	prev_has_normal = ctx->has_normal;
-	
+
+	/*printf("prev_unif: %lf, prev_has_normal: %d, prev_rng_s: %lu, %lu, %lu, %lu\n",
+	       prev_unif, prev_has_normal, prev_rng_s[0], prev_rng_s[1], prev_rng_s[2], prev_rng_s[3]);
+	       */
+
 	// Init RNG with a fixed seed
 	//~ random_init(current_lp->lib_ctx_p->rng_s, 0, 42);
 	random_init(ctx->rng_s, 0, 42);

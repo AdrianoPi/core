@@ -34,7 +34,9 @@ void msg_queue_insert_retractable()
 	if(msg==NULL){ // Need to create a new retractable msg
 		msg = msg_allocator_pack(current_lid, current_lp->lib_ctx_p->r_ts,
 			current_lp->lib_ctx_p->r_e_type, NULL, 0);
-
+#if LOG_LEVEL <= LOG_DEBUG
+		msg->send_t = current_lp->p.last_t;
+#endif
 		msg->flags = MSG_FLAG_RETRACTABLE;
 		current_lp->r_msg = msg;
 
@@ -53,6 +55,9 @@ void msg_queue_insert_retractable()
 	// Set the correct values for the message
 	msg->dest_t = current_lp->lib_ctx_p->r_ts;
 	msg->m_type = current_lp->lib_ctx_p->r_e_type;
+#if LOG_LEVEL <= LOG_DEBUG
+	msg->send_t = current_lp->p.last_t;
+#endif
 
 	// Schedule the message
 	if(already_in_Q){

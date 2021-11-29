@@ -351,6 +351,17 @@ void process_msg(void)
 		return;
 	}
 
+	if(msg->dest_t > global_config.termination_time){
+		// Just ignore events after termination time.
+		// This causes leaks.
+		// Only useful to force stop the simulation in tests
+		if(unlikely(is_retractable(msg))){
+			current_lp->r_msg = NULL; // Now the msg is handled by the processedQ
+			DescheduleRetractableEvent();
+		}
+		return;
+	}
+
 #ifdef PUBSUB
 	if(is_pubsub_msg(msg)){
 		// A pubsub message that needs to be unpacked

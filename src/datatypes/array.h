@@ -107,7 +107,6 @@ __extension__({								\
 		&(array_items(self)[(i)+1]),				\
 		sizeof(*array_items(self)) * (array_count(self)-(i))	\
 	);								\
-	array_shrink(self);						\
 	__rmval;							\
 })
 

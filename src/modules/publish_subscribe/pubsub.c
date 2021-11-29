@@ -158,7 +158,7 @@ void pub_node_handle_published_message(struct lp_msg* msg){
 		size_t blueprint_msg_size = offsetof(struct lp_msg, pl) + n_stripped_payload_size(msg);
 		memcpy(blueprint_msg, msg, blueprint_msg_size);
 		blueprint_msg->pl_size = n_stripped_payload_size(msg);
-		blueprint_msg->flags = 0;
+		blueprint_msg->raw_flags = 0;
 
 		for (int dest_nid=0; it<ct; dest_nid++){
 
@@ -264,16 +264,10 @@ void sub_node_handle_published_message(struct lp_msg* msg){
 		// Create child message
 		// Target holds the target thread's tid
 		struct lp_msg *child_msg = msg_allocator_alloc(child_pl_size);
+		memcpy(child_msg, msg, offsetof(struct lp_msg, pl_size) + child_pl_size);
 		child_msg->dest = t_entry->tid;
-		child_msg->dest_t = msg->dest_t;
-		child_msg->m_type = msg->m_type;
 		child_msg->pl_size = child_pl_size;
-#if LOG_LEVEL <= LOG_DEBUG
-		child_msg->send = msg->send;
-		child_msg->send_t = msg->send_t;
-#endif
 
-		memcpy(child_msg->pl, msg->pl, msg->pl_size);
 		t_lp_arr(child_msg) = &(t_entry->lp_arr);
 		t_children_count(child_msg) = 0;
 		t_children_ptr(child_msg) = NULL;
@@ -283,7 +277,7 @@ void sub_node_handle_published_message(struct lp_msg* msg){
 		// Contents	:		[ 	*(msg->pl) 	| 	lp_arr*	|	0	|	NULL	]
 		// The info for pubsub will be filled out by the thread handling the messages
 
-		atomic_store_explicit(&child_msg->flags, MSG_FLAG_PUBSUB, memory_order_relaxed);
+		atomic_fetch_add_explicit(&child_msg->flags, MSG_FLAG_PUBSUB, memory_order_relaxed);
 
 		// Push child message into target thread's incoming queue
 		pubsub_msg_queue_insert(child_msg);
@@ -590,7 +584,7 @@ static inline struct lp_msg* get_positive_pubsub_msg(const struct lp_msg *a_msg)
 	while (past_i<ct) {
 		struct lp_msg *msg = unmark_msg(array_get_at(past_pubsubs, past_i));
 		if ((msg->raw_flags >> MSG_FLAGS_BITS) == m_id && msg->m_seq == m_seq) {
-			msg->raw_flags |= MSG_FLAG_ANTI;
+			atomic_fetch_add_explicit(&msg->flags, MSG_FLAG_ANTI, memory_order_relaxed);
 
 			// TODO: is it better to free while antimessaging
 			//  or letting the fossil collector free it later?

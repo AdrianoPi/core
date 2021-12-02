@@ -306,7 +306,7 @@ void NewProbe(neuron_id_t target_neuron){
 	return;
 }
 
-void snn_module_lp_init(){// Init the neuron memory here (memory manager is up and running) rather than in ProcessEvent of INIT
+void snn_module_init(){// Init the neuron memory here (memory manager is up and running) rather than in ProcessEvent of INIT
 
 	printdbg("[SNN M T%u] Initializing topology...\n", rid);
 	printdbg("[SNN M T%u] Initializing neurons...\n", rid);
@@ -363,6 +363,18 @@ void snn_module_lp_init(){// Init the neuron memory here (memory manager is up a
 	ctx->unif = prev_unif;
 	ctx->has_normal = prev_has_normal;
 	
+	return;
+}
+
+void snn_module_fini(){// Init the neuron memory here (memory manager is up and running) rather than in ProcessEvent of INIT
+
+	// Iterate on LPs owned by this thread
+	for(lp_id_t lp_id = lid_thread_first; lp_id < lid_thread_end; lp_id++){
+
+		mm_free(lps[lp_id].lib_ctx_p->state_s);
+
+	}
+
 	return;
 }
 

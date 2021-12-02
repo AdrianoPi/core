@@ -16,7 +16,9 @@
 #define size_of_pubsub_info	(sizeof(size_t) + sizeof(struct lp_msg*))
 
 extern void pubsub_module_lp_init(void);
+extern void pubsub_module_lp_fini(void);
 extern void pubsub_module_init(void);
+extern void pubsub_module_fini(void);
 extern void pubsub_module_global_init(void);
 extern void pubsub_module_global_fini(void);
 extern void pubsub_on_gvt(simtime_t current_gvt);

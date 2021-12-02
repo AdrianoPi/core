@@ -67,6 +67,8 @@ static void worker_thread_fini(void)
 
 	process_fini();
 	lp_fini();
+	pubsub_module_fini();
+	snn_module_fini();
 	model_allocator_fini();
 	msg_queue_fini();
 	sync_thread_barrier();

@@ -6,7 +6,8 @@
 #include <lib/lib_internal.h>
 #include <lib/lib.h>
 
-void retractable_lib_lp_init(void);
+void retractable_module_lp_fini(void);
+void retractable_module_lp_init(void);
 
 void msg_queue_insert_retractable();
 

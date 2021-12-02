@@ -23,7 +23,8 @@
 //#endif
 
 #ifdef NEURAL
-extern void snn_module_lp_init();
+extern void snn_module_init();
+extern void snn_module_fini();
 #endif
 
 uint64_t lid_node_first;
@@ -112,7 +113,7 @@ void lp_init(void)
 // TODO: readd guards
 //#ifdef RETRACTABILITY
 
-		retractable_lib_lp_init();
+		retractable_module_lp_init();
 //#endif
 
 #ifdef NEURAL
@@ -120,7 +121,7 @@ void lp_init(void)
 	
 	sync_thread_barrier();
 	// Remember this is called once per thread
-	snn_module_lp_init();
+	snn_module_init();
 	
 	sync_thread_barrier();
 
@@ -153,6 +154,8 @@ void lp_fini(void)
 		process_lp_fini();
 		lib_lp_fini_pr();
 		model_allocator_lp_fini();
+        	retractable_module_lp_fini();
+		pubsub_module_lp_fini();
 	}
 
 	current_lp = NULL;

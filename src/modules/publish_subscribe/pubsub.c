@@ -79,6 +79,10 @@ void pubsub_module_lp_init(){
 	current_lp->n_remote_sub_nodes = 0;
 }
 
+void pubsub_module_lp_fini(){
+	mm_free(current_lp->subnodes);
+}
+
 // OK
 /// Initializes structures needed for pubsub module
 void pubsub_module_global_init(){
@@ -96,7 +100,7 @@ void pubsub_module_global_init(){
 
 /// Last call to the pubsub module
 void pubsub_module_global_fini(){
-	// Right now just prints two json files:
+	// Print two json files:
 	// One is the subscribers table
 	// The other is an array that at index i contains the list of subscribers of LP i.
 	// Each MPI node prints its file containing its portion of the information
@@ -116,11 +120,45 @@ void pubsub_module_global_fini(){
 	pprint_subscribers_adjacency_list(f);
 	fclose(f);
 #endif
+
+	mm_free(tableLocks);
+	// Free the entire subscribersTable and its contents
+	for(lp_id_t pub_id=0; pub_id<n_lps; pub_id++){
+		t_entry_arr t_arr = subscribersTable[pub_id];
+		// Free lp_arrs in t_arr.items
+		for (array_count_t t_index = 0; t_index < array_count(t_arr); ++t_index) {
+			lp_entry_arr lp_arr = array_get_at(t_arr, t_index).lp_arr;
+			// free each allocated element of lp_arr.items
+			for (array_count_t l_index = 0; l_index < array_count(lp_arr); ++l_index) {
+				table_lp_entry_t lp_entry = array_get_at(lp_arr, l_index);
+
+				if (lp_entry.data){
+					mm_free(lp_entry.data);
+				}
+			}
+			array_fini(lp_arr);
+		}
+		array_fini(t_arr);
+	}
+	mm_free(subscribersTable);
+
 }
 
 void pubsub_module_init(){
 	array_init(past_pubsubs);
 	array_init(early_pubsub_antis);
+}
+
+void pubsub_module_fini(){
+	for (array_count_t i = 0; i < array_count(past_pubsubs); ++i) {
+		pubsub_msg_free(array_get_at(past_pubsubs, i));
+	}
+	array_fini(past_pubsubs);
+
+	for (array_count_t i = 0; i < array_count(early_pubsub_antis); ++i) {
+		msg_allocator_free(array_get_at(early_pubsub_antis, i));
+	}
+	array_fini(early_pubsub_antis);
 }
 
 /// This is called when a local LP publishes a message.
@@ -475,7 +513,7 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 	// Do this after making copies, or it will dirty MPI messages!
 	atomic_store_explicit(&msg->flags, MSG_FLAG_PUBSUB, memory_order_relaxed);
 
-	array_push(proc_p->p_msgs, mark_msg_sent(msg));
+	array_push(proc_p->p_msgs, mark_msg_remote(msg));
 }
 
 // Ok?
@@ -796,10 +834,6 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 // Free a pubsub msg
 inline void pubsub_msg_free(struct lp_msg* p_msg){
 
-	// FIXME: remove this. Find a better way to deal with cleaning up.
-	if(unlikely(!current_lp)){
-		return;
-	}
 	struct lp_msg *msg = unmark_msg(p_msg);
 	// Works for both node and thread-level
 	struct lp_msg **c_ptr = children_ptr(msg);
@@ -807,25 +841,23 @@ inline void pubsub_msg_free(struct lp_msg* p_msg){
 	msg->flags &= (~MSG_FLAG_PUBSUB);
 
 	if(c_ptr){
-		// If Node-level, free the MPI children
-		if(!is_thread_lv(p_msg)){
-			// FIXME: this shouldn't need to check if current_lp is not null every time!
-			//  But currently needed to avoid crashing upon cleaning up.
-			int ct;
-			if(likely(current_lp)){
-				ct = current_lp->n_remote_sub_nodes;
-			} else {
-				ct = 0;
-			}
-			for(int i = 0; i < ct; i++){
-				msg_allocator_free(c_ptr[i]);
+		// If it has children, we can check the first child's raw_flags
+		// to see if msg is node-level
+		size_t children_ct = children_count(msg);
+		if(likely(children_ct)){
+			// If the first child has an id attached, it is for MPI
+			if(unlikely(c_ptr[0]->raw_flags >> MSG_FLAGS_BITS)){
+				array_count_t local_children = array_count(subscribersTable[msg->dest]);
+				children_ct -= local_children;
+				// Free children for MPI
+				for(size_t i = 0; i < children_ct; i++){
+					msg_allocator_free(c_ptr[i]);
+				}
 			}
 		}
 		// Free the array pointing to children
 		// The local children will be freed independently
 		mm_free(c_ptr);
-		// TODO-maybe: make it so that local children get freed here? To avoid
-		//  putting them in past_pubsubs, keeping only remote ones there
 	}
 
 	msg_allocator_free(msg);

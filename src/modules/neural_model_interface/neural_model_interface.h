@@ -92,4 +92,5 @@ typedef struct event_content_t {
 } event_t;
 
 /* Tentative: This is the function called by the framework to initialize this module */
-void snn_module_lp_init();
+void snn_module_init();
+void snn_module_fini();

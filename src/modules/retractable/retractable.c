@@ -9,7 +9,7 @@ extern bool is_retractable_and_valid(const struct lp_msg* msg);
 extern bool is_valid_retractable(const struct lp_msg* msg);
 extern void DescheduleRetractableEvent();
 
-void retractable_lib_lp_init(){
+void retractable_module_lp_init(){
 	
 	current_lp->r_msg = NULL;
 	
@@ -17,6 +17,16 @@ void retractable_lib_lp_init(){
 	current_lp->lib_ctx_p->r_e_type = -1;
 
 	return;
+}
+
+void retractable_module_lp_fini(){
+
+    struct lp_msg * msg = current_lp->r_msg;
+    if(msg && msg->dest_t<0){
+        msg_allocator_free(current_lp->r_msg);
+    }
+
+    return;
 }
 
 /* This function populates the retractable message with the correct info
@@ -34,7 +44,9 @@ void msg_queue_insert_retractable()
 	if(msg==NULL){ // Need to create a new retractable msg
 		msg = msg_allocator_pack(current_lid, current_lp->lib_ctx_p->r_ts,
 			current_lp->lib_ctx_p->r_e_type, NULL, 0);
-
+#if LOG_LEVEL <= LOG_DEBUG
+		msg->send_t = current_lp->p.last_t;
+#endif
 		msg->flags = MSG_FLAG_RETRACTABLE;
 		current_lp->r_msg = msg;
 
@@ -53,6 +65,9 @@ void msg_queue_insert_retractable()
 	// Set the correct values for the message
 	msg->dest_t = current_lp->lib_ctx_p->r_ts;
 	msg->m_type = current_lp->lib_ctx_p->r_e_type;
+#if LOG_LEVEL <= LOG_DEBUG
+	msg->send_t = current_lp->p.last_t;
+#endif
 
 	// Schedule the message
 	if(already_in_Q){

@@ -14,9 +14,7 @@
 #include <datatypes/array.h>
 #include <gvt/gvt.h>
 
-#ifdef PUBSUB
 #include <modules/publish_subscribe/pubsub.h>
-#endif
 
 static __thread dyn_array(struct lp_msg *) free_list = {0};
 
@@ -72,15 +70,21 @@ struct lp_msg* msg_allocator_alloc(unsigned payload_size)
 void msg_allocator_free(struct lp_msg *msg)
 {
 #ifdef PUBSUB
+	// Longer but clearer if we repeat everything.
 	if(is_pubsub_msg(msg)){
 		pubsub_msg_free(msg);
-	} else
-#endif
+	} else if(likely(msg->pl_size <= BASE_PAYLOAD_SIZE)) {
+		array_push(free_list, msg);
+	} else {
+		mm_free(msg);
+	}
+#else
 	if(likely(msg->pl_size <= BASE_PAYLOAD_SIZE)) {
 		array_push(free_list, msg);
 	} else {
 		mm_free(msg);
 	}
+#endif
 }
 
 /**

@@ -137,6 +137,8 @@ void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, con
 			new_event.value = SynapseHandleSpike_pr(delivery_time, 0, me, syn->data);
 			
 			ScheduleNewEvent_pr(me, delivery_time, SPIKE, &new_event, sizeof(new_event));
+
+			break;
 		}
 		
 		default:

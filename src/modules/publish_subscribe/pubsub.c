@@ -37,9 +37,9 @@
 #define unmark_msg(msg_p) \
 	((struct lp_msg *)(((uintptr_t)(msg_p)) & (UINTPTR_MAX - 3)))
 
+// Holds thread-level pubsub messages
 __thread dyn_array(struct lp_msg *) past_pubsubs;
 __thread dyn_array(struct lp_msg *) early_pubsub_antis;
-
 
 typedef struct table_lp_entry_t{
 	lp_id_t lid;
@@ -58,6 +58,112 @@ typedef dyn_array(table_thread_entry_t) t_entry_arr;
 t_entry_arr *subscribersTable;
 spinlock_t *tableLocks;
 
+/// List of functions wrapping macros to make them available when debugging
+#if LOG_LEVEL <= LOG_DEBUG
+// For when the message is being handled at node level
+size_t n_stripped_payload_size_f(struct lp_msg* msg){
+	return n_stripped_payload_size(msg);
+}
+
+size_t n_offset_of_children_count_f(struct lp_msg* msg){
+	return n_offset_of_children_count(msg);
+}
+
+size_t n_offset_of_children_ptr_f(struct lp_msg* msg) {
+	return n_offset_of_children_ptr(msg);
+}
+
+size_t n_children_count_f(struct lp_msg* msg) {
+	return n_children_count(msg);
+}
+
+struct lp_msg** n_children_ptr_f(struct lp_msg* msg) {
+	return n_children_ptr(msg);
+}
+
+// For when the message is being handled at thread level
+size_t size_of_thread_pubsub_info_f() {
+	return size_of_thread_pubsub_info;
+}
+
+size_t t_stripped_payload_size_f(struct lp_msg* msg){
+	return t_stripped_payload_size(msg);
+}
+
+size_t t_offset_of_lp_arr_f(struct lp_msg* msg) {
+	return t_offset_of_lp_arr(msg);
+}
+
+size_t t_offset_of_children_count_f(struct lp_msg* msg) {
+	return t_offset_of_children_count(msg);
+}
+
+size_t t_offset_of_children_ptr_f(struct lp_msg* msg) {
+	return t_offset_of_children_ptr(msg);
+}
+
+lp_entry_arr* t_lp_arr_f(struct lp_msg* msg) {
+	return t_lp_arr(msg);
+}
+
+size_t t_children_count_f(struct lp_msg* msg) {
+	return t_children_count(msg);
+}
+
+struct lp_msg** t_children_ptr_f(struct lp_msg* msg) {
+	return t_children_ptr(msg);
+}
+
+// Valid for both Node-level and Thread-level
+size_t offset_of_children_ptr_f(struct lp_msg* msg) {
+	return offset_of_children_ptr(msg);
+}
+
+struct lp_msg** children_ptr_f(struct lp_msg* msg) {
+	return children_ptr(msg);
+}
+
+size_t offset_of_children_count_f(struct lp_msg* msg) {
+	return offset_of_children_count(msg);
+}
+
+size_t children_count_f(struct lp_msg* msg) {
+	return children_count(msg);
+}
+
+struct lp_msg* unmark_msg_f(struct lp_msg* msg) {
+	return unmark_msg(msg);
+}
+
+// This is needed otherwise compiler may strip the functions away
+void call_wrapped_macros(){
+
+	struct lp_msg * msg = mm_alloc(sizeof(struct lp_msg) + size_of_thread_pubsub_info);
+	msg->pl_size = size_of_thread_pubsub_info;
+
+	n_stripped_payload_size_f(msg);
+	n_offset_of_children_count_f(msg);
+	n_offset_of_children_ptr_f(msg);
+	n_children_count_f(msg);
+	n_children_ptr_f(msg);
+	size_of_thread_pubsub_info_f();
+	t_stripped_payload_size_f(msg);
+	t_offset_of_lp_arr_f(msg);
+	t_offset_of_children_count_f(msg);
+	t_offset_of_children_ptr_f(msg);
+	t_lp_arr_f(msg);
+	t_children_count_f(msg);
+	t_children_ptr_f(msg);
+	offset_of_children_ptr_f(msg);
+	children_ptr_f(msg);
+	offset_of_children_count_f(msg);
+	children_count_f(msg);
+	unmark_msg_f(msg);
+
+	mm_free(msg);
+}
+#endif
+
 inline void mpi_pubsub_remote_msg_send(struct lp_msg *msg, nid_t dest_nid);
 extern void mpi_pubsub_remote_msg_send(struct lp_msg *msg, nid_t dest_nid);
 inline void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid);
@@ -68,6 +174,9 @@ extern void thread_actually_antimessage(struct lp_msg *msg);
 
 inline void pubsub_insert_in_past(struct lp_msg *msg);
 extern void pubsub_insert_in_past(struct lp_msg *msg);
+
+inline void pubsub_thread_msg_free(struct lp_msg *msg);
+extern void pubsub_thread_msg_free(struct lp_msg* msg);
 
 void pprint_subscribers_table();
 void pprint_subscribers_adjacency_list();
@@ -95,6 +204,11 @@ void pubsub_module_global_init(){
 		array_count(subscribersTable[i])=0; // Unorthodox. Works
 		spin_init(&(tableLocks[i]));
 	}
+
+#if LOG_LEVEL <= LOG_DEBUG
+	// Needed to prevent compiler from stripping wrapper functions away
+	call_wrapped_macros();
+#endif
 }
 
 
@@ -125,6 +239,9 @@ void pubsub_module_global_fini(){
 	// Free the entire subscribersTable and its contents
 	for(lp_id_t pub_id=0; pub_id<n_lps; pub_id++){
 		t_entry_arr t_arr = subscribersTable[pub_id];
+		if(!array_count(t_arr)){
+			continue;
+		}
 		// Free lp_arrs in t_arr.items
 		for (array_count_t t_index = 0; t_index < array_count(t_arr); ++t_index) {
 			lp_entry_arr lp_arr = array_get_at(t_arr, t_index).lp_arr;
@@ -151,7 +268,7 @@ void pubsub_module_init(){
 
 void pubsub_module_fini(){
 	for (array_count_t i = 0; i < array_count(past_pubsubs); ++i) {
-		pubsub_msg_free(array_get_at(past_pubsubs, i));
+		pubsub_thread_msg_free(array_get_at(past_pubsubs, i));
 	}
 	array_fini(past_pubsubs);
 
@@ -239,19 +356,15 @@ void pub_node_handle_published_message(struct lp_msg* msg){
 		table_thread_entry_t *t_entry = &array_get_at(threads, c);
 
 		struct lp_msg *child_msg = msg_allocator_alloc(child_pl_size);
-		// TODO: memcpy msg, and then change dest and pl_size?
+		memcpy(child_msg, msg, offsetof(struct lp_msg, pl_size));
 		// Target is the target thread's tid
 		child_msg->dest = t_entry->tid;
-		child_msg->dest_t = msg->dest_t;
-		child_msg->m_type = msg->m_type;
 		child_msg->pl_size = child_pl_size;
-#if LOG_LEVEL <= LOG_DEBUG
-		child_msg->send = msg->send;
-		child_msg->send_t = msg->send_t;
-#endif
 
+		// Copy and populate the payload
 		memcpy(child_msg->pl, msg->pl, n_stripped_payload_size(msg));
-		t_lp_arr(child_msg) = &(t_entry->lp_arr);
+//		t_lp_arr(child_msg) = &(t_entry->lp_arr);
+		t_lp_arr(child_msg) = &(array_get_at(threads, c).lp_arr);
 		t_children_count(child_msg) = 0;
 		t_children_ptr(child_msg) = NULL;
 
@@ -302,10 +415,13 @@ void sub_node_handle_published_message(struct lp_msg* msg){
 		// Create child message
 		// Target holds the target thread's tid
 		struct lp_msg *child_msg = msg_allocator_alloc(child_pl_size);
-		memcpy(child_msg, msg, offsetof(struct lp_msg, pl_size) + child_pl_size);
+		memcpy(child_msg, msg, offsetof(struct lp_msg, pl_size));
+		// Target is the target thread's tid
 		child_msg->dest = t_entry->tid;
 		child_msg->pl_size = child_pl_size;
 
+		// Copy and populate the payload
+		memcpy(child_msg->pl, msg->pl, msg->pl_size);
 		t_lp_arr(child_msg) = &(t_entry->lp_arr);
 		t_children_count(child_msg) = 0;
 		t_children_ptr(child_msg) = NULL;
@@ -381,10 +497,10 @@ void thread_handle_published_message(struct lp_msg* msg){
 	if(!array_count(lp_arr)){
 		uint32_t flags = atomic_fetch_add_explicit(&msg->flags, MSG_FLAG_PROCESSED, memory_order_relaxed);
 		if(flags & MSG_FLAG_ANTI){ // Can only happen with local pubsubs
-			pubsub_msg_free(mark_as_thread_lv(msg));
+			pubsub_thread_msg_free(msg);
 		} else {
 			// Cannot just free because antimessaging could happen
-			pubsub_insert_in_past(mark_as_thread_lv(msg));
+			pubsub_insert_in_past(msg);
 		}
 		return;
 	}
@@ -478,7 +594,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 		return;
 	}
 
-	pubsub_insert_in_past(mark_as_thread_lv(msg));
+	pubsub_insert_in_past(msg);
 }
 
 // ok
@@ -641,8 +757,8 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 		if (anti_msg->flags & MSG_FLAG_PROCESSED){
 			thread_actually_antimessage(anti_msg);
 		} else {
-			// Was still not put in past_pubsubs
-			pubsub_msg_free(mark_as_thread_lv(anti_msg));
+			// Was still not processed
+			pubsub_thread_msg_free(anti_msg);
 		}
 		return;
 	}
@@ -662,7 +778,7 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 	thread_actually_antimessage(msg);
 	// TODO: is it better to free while antimessaging
 	//  or letting the fossil collector free it later?
-	pubsub_msg_free(mark_as_thread_lv(msg));
+	pubsub_thread_msg_free(msg);
 }
 
 /// Carries out antimessaging of thread-level pubsub message
@@ -831,35 +947,62 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 }
 
 // OK
-// Free a pubsub msg
-inline void pubsub_msg_free(struct lp_msg* p_msg){
+// Free a (node level) pubsub msg
+// If the message is node-level, then it will have local children and possibly
+//  MPI children and will properly behave
+// If the message is thread-level, then this was called from outside pubsub.c,
+// meaning that it was called by msg_allocator_free
+// message_allocator_free may only be called on a pubsub msg in one of two cases:
+// 1. When fossil collecting => the message is node-level pubsub
+// 2. When cleaning up (msg_queue_fini) => the message is thread level.
+// In case 2, the thread-level message will not have any children
+// the check on c_ptr will thus fail and behave exactly as pubsub_thread_msg_free
+inline void pubsub_msg_free(struct lp_msg* msg){
 
-	struct lp_msg *msg = unmark_msg(p_msg);
+	// No race conditions: either GVT>dest_t, already antimsgd, or cleaing up
+	msg->raw_flags &= (~MSG_FLAG_PUBSUB);
+
+	// If msg is from another node and has flag anti, we are cleaning up
+	// and it was waiting to be extracted from incoming queue
+	if((msg->raw_flags >> MSG_FLAGS_BITS) && (msg->raw_flags & MSG_FLAG_ANTI)){
+		msg_allocator_free(msg);
+		return;
+	}
+
 	// Works for both node and thread-level
-	struct lp_msg **c_ptr = children_ptr(msg);
-	// No race conditions: either GVT>dest_t, or already antimsgd
-	msg->flags &= (~MSG_FLAG_PUBSUB);
+	struct lp_msg **c_ptr = n_children_ptr(msg);
 
 	if(c_ptr){
-		// If it has children, we can check the first child's raw_flags
-		// to see if msg is node-level
-		size_t children_ct = children_count(msg);
+		// If it has children
+		size_t children_ct = n_children_count(msg);
+		// We can use count of local subscribers to know
+		// how many children were destined to MPI
 		if(likely(children_ct)){
-			// If the first child has an id attached, it is for MPI
-			if(unlikely(c_ptr[0]->raw_flags >> MSG_FLAGS_BITS)){
-				array_count_t local_children = array_count(subscribersTable[msg->dest]);
-				children_ct -= local_children;
-				// Free children for MPI
-				for(size_t i = 0; i < children_ct; i++){
-					msg_allocator_free(c_ptr[i]);
-				}
+			array_count_t local_children = array_count(subscribersTable[msg->dest]);
+			children_ct -= local_children;
+			// Free children for MPI
+			for(size_t i = 0; i < children_ct; i++){
+				msg_allocator_free(c_ptr[i]);
 			}
 		}
 		// Free the array pointing to children
 		// The local children will be freed independently
-		mm_free(c_ptr);
+		mm_free(n_children_ptr(msg));
 	}
 
+	msg_allocator_free(msg);
+}
+
+inline void pubsub_thread_msg_free(struct lp_msg* msg){
+	// Works for both node and thread-level
+	// No race conditions: either GVT>dest_t, or already antimsgd
+	msg->raw_flags &= (~MSG_FLAG_PUBSUB);
+
+	if(children_ptr(msg)){
+		// Free the array pointing to children
+		// The local children will be freed independently
+		mm_free(children_ptr(msg));
+	}
 	msg_allocator_free(msg);
 }
 
@@ -889,7 +1032,7 @@ void pubsub_on_gvt(simtime_t current_gvt){
 		if(unmark_msg(msg)->dest_t >= current_gvt){
 			break;
 		}
-		pubsub_msg_free(msg);
+		pubsub_thread_msg_free(msg);
 	}
 	array_truncate_first(past_pubsubs, i);
 

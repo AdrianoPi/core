@@ -7,13 +7,11 @@
 #include <lib/lib.h>
 #include <core/intrinsics.h>
 #include <datatypes/bitmap.h>
-
-#ifdef ROOTSIM_MPI
 #include <distributed/mpi.h>
-#endif
 
 // Size of additional data needed by pubsub messages published locally
 #define size_of_pubsub_info	(sizeof(size_t) + sizeof(struct lp_msg*))
+#define is_fresh_pubsub_msg(msg)	(lid_to_nid((msg)->dest) != nid)
 
 extern void pubsub_module_lp_init(void);
 extern void pubsub_module_lp_fini(void);
@@ -52,5 +50,5 @@ extern void pubsub_msg_queue_insert(struct lp_msg* msg);
 
 #define is_pubsub_msg(msg)						\
 __extension__({								\
-	(msg)->flags & MSG_FLAG_PUBSUB;					\
+	(msg)->raw_flags & MSG_FLAG_PUBSUB;				\
 })

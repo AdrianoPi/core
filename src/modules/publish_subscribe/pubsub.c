@@ -1074,34 +1074,6 @@ inline void pubsub_insert_in_past(struct lp_msg *msg){
 	array_add_at(past_pubsubs, min, msg);
 }
 
-// OK? Should work provided we use one message buffer per target
-/// Send a pubsub message to dest_nid via MPI, but also use mpi tags
-inline void mpi_pubsub_remote_msg_send(struct lp_msg *msg, nid_t dest_nid)
-{
-	gvt_remote_msg_send(msg, dest_nid);
-
-	mpi_lock();
-	MPI_Request req;
-	MPI_Isend(msg, msg_bare_size(msg), MPI_BYTE,
-			dest_nid, MSG_PUBSUB, MPI_COMM_WORLD, &req);
-	MPI_Request_free(&req);
-	mpi_unlock();
-}
-
-// OK? Should work as we use one message buffer per target
-/// Antimessage a pubsub message to dest_nid via MPI, but also use mpi tags
-inline void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid)
-{
-	gvt_remote_anti_msg_send(msg, dest_nid);
-
-	mpi_lock();
-	MPI_Request req;
-	MPI_Isend(msg, msg_anti_size(), MPI_BYTE,
-		dest_nid, MSG_PUBSUB, MPI_COMM_WORLD, &req);
-	MPI_Request_free(&req);
-	mpi_unlock();
-}
-
 #if LOG_LEVEL <= LOG_DEBUG
 void pprint_table_lp_entry_t(table_lp_entry_t e, FILE *f){
 	fprintf(f, "%lu", e.lid);

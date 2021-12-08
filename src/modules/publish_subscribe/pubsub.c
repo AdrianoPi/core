@@ -489,7 +489,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 	 * an array of pointers in the payload.
 	 * Contents of msg->pl once populated:
 	 * [ pl	| &lp_arr	| childCount	| lp_msg**	]
-	 * 
+	 *
 	 * Contents right now:
 	 * [ pl	| &lp_arr	| 	0	| NULL		]
 	 */
@@ -512,7 +512,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 
 	children_ptr(msg) = mm_alloc(sizeof(struct lp_msg*) * array_count(lp_arr));
 	// Contents msg->pl now:
-	// Byte offsets	:v-0    v-og_pl_size	v-(pl_size+sizeof(void*))	
+	// Byte offsets	:v-0    v-og_pl_size	v-(pl_size+sizeof(void*))
 	// Contents	:[ pl	| &lp_arr	| childCount	| lp_msg**	]
 
 	// Here calculate the size of the payload for the messages LPs will receive
@@ -711,9 +711,6 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg){
 	}
 #endif
 
-	// The message generated no thread-level children
-	if(!child_count) {return;}
-
 	// Now antimessage every local child by setting flag + requeueing
 	for(long unsigned int i=0; i<child_count; i++){
 		cmsg = children[i];
@@ -729,6 +726,8 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg){
 			pubsub_msg_queue_insert(cmsg);
 		}
 	}
+
+	msg_allocator_free(msg);
 }
 
 /// Gets the positive message matching a_msg by removing it from past_pubsubs.
@@ -1005,7 +1004,7 @@ inline void pubsub_thread_msg_free(struct lp_msg* msg){
 // Insert a thread-level pubsub message in queue
 void pubsub_msg_queue_insert(struct lp_msg* msg){
 
-	// msg->dest contains the thread id 
+	// msg->dest contains the thread id
 	unsigned dest_rid = msg->dest;
 	struct msg_queue *mq = &queues[dest_rid];
 	struct q_elem qe = {.t = msg->dest_t, .m = msg};

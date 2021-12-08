@@ -335,7 +335,7 @@ void pub_node_handle_published_message(struct lp_msg* msg){
 				children_ptr(msg)[it] = mpi_msg;
 				++it;
 
-				mpi_pubsub_remote_msg_send(mpi_msg, dest_nid);
+				mpi_remote_msg_send(mpi_msg, dest_nid);
 			}
 		}
 		msg_allocator_free(blueprint_msg);
@@ -702,7 +702,7 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg){
 				if (bitmap_check(subs, dest_nid)) {
 
 					cmsg = children[-ct];
-					mpi_pubsub_remote_anti_msg_send(cmsg, dest_nid);
+					mpi_remote_anti_msg_send(cmsg, dest_nid);
 
 					ct--;
 				}

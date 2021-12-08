@@ -73,18 +73,13 @@ void msg_allocator_free(struct lp_msg *msg)
 	// Longer but clearer if we repeat everything.
 	if(is_pubsub_msg(msg)){
 		pubsub_msg_free(msg);
-	} else if(likely(msg->pl_size <= BASE_PAYLOAD_SIZE)) {
-		array_push(free_list, msg);
-	} else {
-		mm_free(msg);
 	}
-#else
+#endif
 	if(likely(msg->pl_size <= BASE_PAYLOAD_SIZE)) {
 		array_push(free_list, msg);
 	} else {
 		mm_free(msg);
 	}
-#endif
 }
 
 /**

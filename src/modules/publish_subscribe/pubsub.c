@@ -268,6 +268,11 @@ void pubsub_module_init(){
 
 void pubsub_module_fini(){
 	for (array_count_t i = 0; i < array_count(past_pubsubs); ++i) {
+		struct lp_msg* msg = array_get_at(past_pubsubs, i);
+		if (msg->raw_flags & MSG_FLAG_ANTI && msg->raw_flags & MSG_FLAG_PROCESSED){
+			// Is in msg_queue and will be freed there.
+			continue;
+		}
 		pubsub_thread_msg_free(array_get_at(past_pubsubs, i));
 	}
 	array_fini(past_pubsubs);
@@ -591,6 +596,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 		// If the message has been antimessaged in the meantime
 		// Take action
 		thread_actually_antimessage(msg);
+		pubsub_thread_msg_free(msg);
 		return;
 	}
 
@@ -739,7 +745,7 @@ static inline struct lp_msg* get_positive_pubsub_msg(const struct lp_msg *a_msg)
 			// TODO: is it better to free while antimessaging
 			//  or letting the fossil collector free it later?
 			// Prevents double free
-			array_remove_at(past_pubsubs, past_i);
+			array_get_at(past_pubsubs, past_i);
 
 			return msg;
 		}
@@ -775,10 +781,8 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 	// We did
 	msg_allocator_free(anti_msg);
 
+	msg->raw_flags += MSG_FLAG_ANTI;
 	thread_actually_antimessage(msg);
-	// TODO: is it better to free while antimessaging
-	//  or letting the fossil collector free it later?
-	pubsub_thread_msg_free(msg);
 }
 
 /// Carries out antimessaging of thread-level pubsub message
@@ -801,6 +805,11 @@ inline void thread_actually_antimessage(struct lp_msg *msg){
 			msg_queue_insert(cmsg);
 		}
 	}
+	// FIXME: aggiorna il resto per essere coerente con questo:
+	// Tolgo flag processed. Se da past_pubsubs un messaggio non ha il flag processed lo posso freeare
+	// Se ha processed e anti, allora sta ancora in msg_queue
+	// La cosa si presenta solo in cleanup.
+	msg->raw_flags -= MSG_FLAG_PROCESSED;
 }
 
 // OK
@@ -958,18 +967,6 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 // In case 2, the thread-level message will not have any children
 // the check on c_ptr will thus fail and behave exactly as pubsub_thread_msg_free
 inline void pubsub_msg_free(struct lp_msg* msg){
-
-	// No race conditions: either GVT>dest_t, already antimsgd, or cleaing up
-	msg->raw_flags &= (~MSG_FLAG_PUBSUB);
-
-	// If msg is from another node and has flag anti, we are cleaning up
-	// and it was waiting to be extracted from incoming queue
-	if((msg->raw_flags >> MSG_FLAGS_BITS) && (msg->raw_flags & MSG_FLAG_ANTI)){
-		msg_allocator_free(msg);
-		return;
-	}
-
-	// Works for both node and thread-level
 	struct lp_msg **c_ptr = n_children_ptr(msg);
 
 	if(c_ptr){
@@ -987,10 +984,8 @@ inline void pubsub_msg_free(struct lp_msg* msg){
 		}
 		// Free the array pointing to children
 		// The local children will be freed independently
-		mm_free(n_children_ptr(msg));
+		mm_free(c_ptr);
 	}
-
-	msg_allocator_free(msg);
 }
 
 inline void pubsub_thread_msg_free(struct lp_msg* msg){
@@ -1029,7 +1024,7 @@ void pubsub_on_gvt(simtime_t current_gvt){
 
 	for(i=0; i<ct; i++){
 		struct lp_msg *msg = array_get_at(past_pubsubs, i);
-		if(unmark_msg(msg)->dest_t >= current_gvt){
+		if(msg->dest_t >= current_gvt){
 			break;
 		}
 		pubsub_thread_msg_free(msg);
@@ -1039,9 +1034,12 @@ void pubsub_on_gvt(simtime_t current_gvt){
 }
 
 /// Adds to past_pubsubs maintaining ordering
+// TODO:
+//  >>> Is array_add_at too costly?
+//  >>> Is binsearch worth it? Probably not.
 inline void pubsub_insert_in_past(struct lp_msg *msg){
 
-	simtime_t time = unmark_msg(msg)->dest_t;
+	simtime_t time = msg->dest_t;
 
 	int size = array_count(past_pubsubs);
 	if(!size) {
@@ -1049,7 +1047,7 @@ inline void pubsub_insert_in_past(struct lp_msg *msg){
 		return;
 	}
 
-	if(time >= unmark_msg(array_peek(past_pubsubs))->dest_t){
+	if(time >= array_peek(past_pubsubs)->dest_t){
 		array_push(past_pubsubs, msg);
 		return;
 	}
@@ -1062,7 +1060,7 @@ inline void pubsub_insert_in_past(struct lp_msg *msg){
 	simtime_t curr_t;
 	do {
 		next = (max+min)/2;
-		curr_t = unmark_msg(array_get_at(past_pubsubs, next))->dest_t;
+		curr_t = array_get_at(past_pubsubs, next)->dest_t;
 		if (time < curr_t){
 			max = next-1;
 		} else if (time > curr_t) {
@@ -1104,6 +1102,7 @@ inline void mpi_pubsub_remote_anti_msg_send(struct lp_msg *msg, nid_t dest_nid)
 	mpi_unlock();
 }
 
+#if LOG_LEVEL <= LOG_DEBUG
 void pprint_table_lp_entry_t(table_lp_entry_t e, FILE *f){
 	fprintf(f, "%lu", e.lid);
 }
@@ -1187,6 +1186,7 @@ void pprint_subscribers_adjacency_list(FILE *f){
 	}
 	fprintf(f, "]\n");
 }
+#endif
 
 #undef current_lid
 

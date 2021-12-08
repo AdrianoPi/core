@@ -23,7 +23,7 @@ test_specs = {
   'unit_sync' : {'src' : ['core' / 'sync_test.c', src_dir / 'core' / 'sync.c']},
   'unit_msg_queue' : {'src' : ['datatypes' / 'msg_queue_test.c', src_dir / 'datatypes' / 'msg_queue.c']},
 # 'unit_gvt' : {'src' : ['gvt' / 'gvt_test.c', src_dir / 'gvt' / 'gvt.c']},
-  'unit_msg_allocator' : {'src' : ['mm' / 'msg_allocator_test.c', src_dir / 'mm' / 'msg_allocator.c']},
+# 'unit_msg_allocator' : {'src' : ['mm' / 'msg_allocator_test.c', src_dir / 'mm' / 'msg_allocator.c']},
 # 'unit_lp' : {'src' : ['lp' / 'lp_test.c', src_dir / 'lp' / 'lp.c']},
   'unit_buddy_allocator' : {'src' : ['mm' / 'buddy' / 'buddy_test.c', src_dir / 'mm' / 'buddy' / 'buddy.c', src_dir / 'mm' / 'buddy' / 'ckpt.c']},
   'unit_buddy_allocator_hard' : {'src' : ['mm' / 'buddy' / 'buddy_hard_test.c', src_dir / 'mm' / 'buddy' / 'buddy.c', src_dir / 'mm' / 'buddy' / 'ckpt.c']},

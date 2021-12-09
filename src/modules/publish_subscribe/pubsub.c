@@ -643,6 +643,8 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 void sub_node_handle_published_antimessage(struct lp_msg *msg){
 	// FIXME: is the usage of flags disruptive for the mpi organization??
 
+	msg->raw_flags += MSG_FLAG_PUBSUB;
+
 	// On sub nodes, just create thread-level copies
 	t_entry_arr threads = subscribersTable[msg->dest];
 
@@ -992,7 +994,7 @@ inline void pubsub_thread_msg_free(struct lp_msg* msg){
 	// No race conditions: either GVT>dest_t, or already antimsgd
 	msg->raw_flags &= (~MSG_FLAG_PUBSUB);
 
-	if(children_ptr(msg)){
+	if(msg->pl_size && children_ptr(msg)){
 		// Free the array pointing to children
 		// The local children will be freed independently
 		mm_free(children_ptr(msg));

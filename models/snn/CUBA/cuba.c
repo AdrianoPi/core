@@ -217,15 +217,14 @@ void ProbeRead(simtime_t now, unsigned long int monitored_neuron, const neuron_s
 
 void GatherStatistics(simtime_t now, unsigned long int neuron_id, const neuron_state_t* state){	
 	//TODO: Fill this in to gather statistics and print them to file
-	double spike_frequency = 1000 * state->times_fired/now;
-	//~ double spike_freq_till_last = state->times_fired/state->last_updated;
-	
 	if(outFile == NULL){//First neuron to write. Open file and write
-		outFile = fopen("CUBARun", "w");
+		char* fname = malloc(strlen("CUBARun_") + 50);
+		sprintf(fname, "CUBARun_%lu", neuron_id);
+		outFile = fopen(fname, "w");
+		free(fname);
 	}
-	
-	fprintf(outFile, "N%lu, f%lf\n", neuron_id, spike_frequency);
-	
+
+	fprintf(outFile, "N%lu, s%lu\n", neuron_id, state->times_fired);
 }
 
 

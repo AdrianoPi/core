@@ -405,13 +405,11 @@ void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 
 			if (nsyn_type==0){
 				// number of synapses calculated with equation 3 from the article
-				//~ nsyn = log(1.0-table[r][c])/log(1.0 - (1.0/(n_layer[c]*n_layer[r])));
-				nsyn = 0.02 * log(1.0-table[r][c])/log(1.0 - (1.0/(n_layer[c]*n_layer[r])));
+				nsyn = log(1.0-table[r][c])/log(1.0 - (1.0/(n_layer[c]*n_layer[r])));
 				printf("NSYN from %d to %d: %d\n", c, r, nsyn);
 			} else if (nsyn_type==1) {
 				// number of synapses calculated with equation 5 from the article
-				//~ nsyn = table[r][c]*n_layer[c]*n_layer[r];
-				nsyn = 0.02 * table[r][c]*n_layer[c]*n_layer[r];
+				nsyn = table[r][c]*n_layer[c]*n_layer[r];
 				printf("NSYN from %d to %d: %d\n", c, r, nsyn);
 			}
 
@@ -450,7 +448,7 @@ void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 				}
 			}
 
-			printf("TotalSynapses %llu\n", syn_ct);
+			//printdbg("TotalSynapses %llu\n", syn_ct);
 		}
 	}
 	
@@ -472,7 +470,7 @@ void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 			}
 		}
 		syn_ct += nsyn;
-		printf("TotalSynapses %llu\n", syn_ct);
+		//printdbg("TotalSynapses %llu\n", syn_ct);
 	}
 	
 	
@@ -688,7 +686,7 @@ simtime_t getNextFireTime(neuron_state_t* state){
 	if(n_helper->A2 > n_params.threshold){ // Neuron is self spiking
 		delta_t = findSpikeDeltaBinaryBlind(n_helper, V0, I0);
 		if (delta_t<=0){
-			printf("Something went wrong\n");
+			printf("Something went wrong: neuron is self spiking, but next spike time was not found\n");
 			abort();
 		}
 		return t0 + delta_t;

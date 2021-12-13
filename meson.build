@@ -29,6 +29,11 @@ else
   c_optimization_options = ['-O' + get_option('optimization')]
 endif
 
+if get_option('profile').enabled()
+  add_global_arguments(['-pg'], language : 'c')
+  add_global_link_arguments(['-pg'], language : 'c')
+endif
+
 # Include directory used explicitly in tests and LLVM plugin compilation
 src_inc_dir = include_directories('src')
 

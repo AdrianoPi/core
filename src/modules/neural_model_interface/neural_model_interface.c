@@ -368,7 +368,7 @@ void snn_module_init(){// Init the neuron memory here (memory manager is up and 
 	return;
 }
 
-void snn_module_fini(){// Init the neuron memory here (memory manager is up and running) rather than in ProcessEvent of INIT
+void snn_module_fini(){// Deinit the neuron memory here (memory manager is up and running) rather than in ProcessEvent of INIT
 
 	// Iterate on LPs owned by this thread
 	for(lp_id_t lp_id = lid_thread_first; lp_id < lid_thread_end; lp_id++){

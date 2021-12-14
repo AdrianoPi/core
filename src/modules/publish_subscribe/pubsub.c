@@ -214,11 +214,13 @@ void pubsub_module_global_init(){
 
 /// Last call to the pubsub module
 void pubsub_module_global_fini(){
+#if LOG_LEVEL <= LOG_DEBUG
+	log_log(LOG_DEBUG, "Starting pubsub_module_global_fini\n");
+
 	// Print two json files:
 	// One is the subscribers table
 	// The other is an array that at index i contains the list of subscribers of LP i.
 	// Each MPI node prints its file containing its portion of the information
-#if LOG_LEVEL <= LOG_DEBUG
 	FILE *f;
 	char* fname = malloc(strlen("SubscribersTable_.json") + 100);
 	sprintf(fname, "SubscribersTable_%d.json", nid);
@@ -233,10 +235,9 @@ void pubsub_module_global_fini(){
 	free(fname);
 	pprint_subscribers_adjacency_list(f);
 	fclose(f);
-#endif
 
+	// Free subscribersTable, its locks and its contents
 	mm_free(tableLocks);
-	// Free the entire subscribersTable and its contents
 	for(lp_id_t pub_id=0; pub_id<n_lps; pub_id++){
 		t_entry_arr t_arr = subscribersTable[pub_id];
 		if(!array_count(t_arr)){
@@ -259,6 +260,9 @@ void pubsub_module_global_fini(){
 	}
 	mm_free(subscribersTable);
 
+	log_log(LOG_DEBUG, "Ending pubsub_module_global_fini\n");
+#endif
+	return;
 }
 
 void pubsub_module_init(){

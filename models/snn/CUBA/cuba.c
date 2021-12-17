@@ -24,7 +24,14 @@
 #define g_El -49.0f			//mV
 #define g_we (60*0.27f/10)	//pA
 #define g_wi (-20*4.5f/10)	//pA
-#define g_syn_delay 1.0f	//mS
+// Possible syn delay #1
+//#define g_syn_delay 1.0f	//mS
+/* Syn delay used in many other models. Standard delay used in
+ * Brette et al. 2007
+ * https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2638500/
+ * (see Section 4.3.3 - Performance)
+* */
+#define g_syn_delay 0.1f	//mS
 
 unsigned long long int syn_ct = 0;
 

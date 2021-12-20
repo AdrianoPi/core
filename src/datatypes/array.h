@@ -134,6 +134,11 @@ __extension__({ 							\
 	} 								\
 })
 
+#define array_reserve_one(self) 					\
+__extension__({ 							\
+	array_expand(self);						\
+})
+
 #define array_reserve(self, n) 						\
 __extension__({ 							\
 	__typeof__(array_count(self)) tcnt = array_count(self) + n;	\

@@ -16,14 +16,13 @@
 #include <stddef.h>
 #include <limits.h>
 
-#define BASE_PAYLOAD_SIZE 32
+#define BASE_PAYLOAD_SIZE 16
 
 #define msg_is_before_serial(ma, mb) ((ma)->dest_t < (mb)->dest_t)
 
 #define msg_is_before(ma, mb) (\
-	(msg_is_before_serial(ma, mb) ||\
-	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags > (mb)->raw_flags) ||\
-	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags == (mb)->raw_flags && (ma) < (mb)))\
+	msg_is_before_serial(ma, mb) || \
+	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags > (mb)->raw_flags)\
 )
 
 #define msg_bare_size(msg) (offsetof(struct lp_msg, pl) + (msg)->pl_size)
@@ -41,8 +40,8 @@ struct lp_msg {
 		/// The message unique id, used for inter-node anti messages
 		uint32_t raw_flags;
 	};
-#if LOG_LEVEL <= LOG_DEBUG
 	lp_id_t send;
+#if LOG_LEVEL <= LOG_DEBUG
 	simtime_t send_t;
 #endif
 	/// The message sequence number

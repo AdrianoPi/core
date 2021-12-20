@@ -11,7 +11,7 @@
 #include <arch/timer.h>
 #include <core/core.h>
 #include <core/init.h>
-#include <datatypes/heap_serial.h>
+#include <datatypes/heap.h>
 #include <lib/lib.h>
 #include <log/stats.h>
 #include <lp/msg.h>
@@ -40,7 +40,7 @@ static struct s_lp_ctx *s_lps;
 /// The context of the currently processed LP
 static struct s_lp_ctx *s_current_lp;
 /// The messages queue of the serial runtime
-static s_heap_declare(struct lp_msg *) queue;
+static heap_declare(struct lp_msg *) queue;
 #if LOG_DEBUG >= LOG_LEVEL
 /// Used for debugging possibly inconsistent models
 static simtime_t current_evt_time;
@@ -65,7 +65,7 @@ static void serial_simulation_init(void)
 	stats_global_init();
 	stats_init();
 	msg_allocator_init();
-	s_heap_init(queue);
+	heap_init(queue);
 	lib_global_init();
 
 #ifdef PUBSUB
@@ -114,7 +114,7 @@ static void serial_simulation_fini(void)
 	mm_free(s_lps);
 
 	lib_global_fini();
-	s_heap_fini(queue);
+	heap_fini(queue);
 	msg_allocator_fini();
 	stats_global_fini();
 }
@@ -127,8 +127,8 @@ static void serial_simulation_run(void)
 	timer_uint last_vt = timer_new();
 	uint64_t to_terminate = n_lps;
 
-	while (likely(!s_heap_is_empty(queue))) {
-		const struct lp_msg *cur_msg = s_heap_min(queue);
+	while (likely(!heap_is_empty(queue))) {
+		const struct lp_msg *cur_msg = heap_min(queue);
 		struct s_lp_ctx *this_lp = &s_lps[cur_msg->dest];
 		s_current_lp = this_lp;
 
@@ -176,7 +176,7 @@ static void serial_simulation_run(void)
 			last_vt = timer_new();
 		}
 
-		msg_allocator_free(s_heap_extract(queue, msg_is_before_serial));
+		msg_allocator_free(heap_extract(queue, msg_is_before_serial));
 	}
 
 	stats_dump();
@@ -193,7 +193,7 @@ void ScheduleNewEvent(lp_id_t receiver, simtime_t timestamp,
 	struct lp_msg *msg = msg_allocator_pack(
 		receiver, timestamp, event_type, payload, payload_size);
 
-	s_heap_insert(queue, msg_is_before_serial, msg);
+	heap_insert(queue, msg_is_before_serial, msg);
 }
 
 /**

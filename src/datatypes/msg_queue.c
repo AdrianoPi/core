@@ -25,9 +25,12 @@
 #include <stdatomic.h>
 
 #include <modules/publish_subscribe/pubsub.h>
+#include <modules/retractable/retractable.h>
 
-#define q_elem_is_before(ma, mb) ((ma).t < (mb).t || 		\
-	((ma).t == (mb).t && (ma).m->raw_flags > (mb).m->raw_flags))
+#define q_elem_is_before(ma, mb) (((ma).t < (mb).t || 		\
+	((ma).t == (mb).t && (ma).m->raw_flags > (mb).m->raw_flags) || \
+	((ma).t == (mb).t && (ma).m->raw_flags == (mb).m->raw_flags && (ma).m->m_type > (mb).m->m_type) || \
+	((ma).t == (mb).t && (ma).m->raw_flags == (mb).m->raw_flags && (ma).m->m_type == (mb).m->m_type && (ma).m->send > (mb).m->send)))
 
 struct q_elem {
 	simtime_t t;
@@ -83,11 +86,12 @@ void msg_queue_fini(void)
 {
 	for (array_count_t i = 0; i < heap_count(mqp.q); ++i) {
 		struct lp_msg* msg = heap_items(mqp.q)[i].m;
-		if(is_pubsub_msg(msg)){
+#ifdef PUBSUB
+		if(is_pubsub_msg(msg))
 			pubsub_thread_msg_free(msg);
-		} else {
+		else
+#endif
 			msg_allocator_free(msg);
-		}
 	}
 
 	heap_fini(mqp.q);
@@ -96,11 +100,12 @@ void msg_queue_fini(void)
 	struct msg_queue *mq = &queues[rid];
 	for (array_count_t i = 0; i < array_count(mq->b); ++i){
 		struct lp_msg* msg = array_get_at(mq->b, i).m;
-		if(is_pubsub_msg(msg)){
+#ifdef PUBSUB
+		if(is_pubsub_msg(msg))
 			pubsub_thread_msg_free(msg);
-		} else {
+		else
+#endif
 			msg_allocator_free(msg);
-		}
 	}
 
 	array_fini(mq->b);
@@ -147,6 +152,13 @@ static inline void msg_queue_insert_queued(void)
 struct lp_msg *msg_queue_extract(void)
 {
 	msg_queue_insert_queued();
+
+	if (likely(rheap_count(r_queue))) {
+		if (!heap_count(mqp.q) ||
+				q_elem_is_before(rheap_min(r_queue), heap_min(mqp.q)))
+			return rheap_extract(r_queue, q_elem_is_before, rq_elem_update).m;
+	}
+
 	return likely(heap_count(mqp.q)) ?
 			heap_extract(mqp.q, q_elem_is_before).m : NULL;
 }
@@ -163,6 +175,13 @@ struct lp_msg *msg_queue_extract(void)
 simtime_t msg_queue_time_peek(void)
 {
 	msg_queue_insert_queued();
+
+	if (likely(rheap_count(r_queue))) {
+		if (!heap_count(mqp.q) ||
+				q_elem_is_before(rheap_min(r_queue), heap_min(mqp.q)))
+			return rheap_min(r_queue).t;
+	}
+
 	return likely(heap_count(mqp.q)) ? heap_min(mqp.q).t : SIMTIME_MAX;
 }
 
@@ -175,6 +194,11 @@ void msg_queue_insert(struct lp_msg *msg)
 	rid_t dest_rid = lid_to_rid(msg->dest);
 	struct msg_queue *mq = &queues[dest_rid];
 	struct q_elem qe = {.t = msg->dest_t, .m = msg};
+
+	if (rid == dest_rid) {
+		heap_insert(mqp.q, q_elem_is_before, qe);
+		return;
+	}
 
 	spin_lock(&mq->q_lock);
 	array_push(mq->b, qe);

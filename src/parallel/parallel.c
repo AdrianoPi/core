@@ -28,18 +28,21 @@
 #include <modules/publish_subscribe/pubsub.h>
 #endif
 
+#include <modules/retractable/retractable.h>
+
 static void worker_thread_init(rid_t this_rid)
 {
 	rid = this_rid;
+	retractable_module_init();
 	stats_init();
 	auto_ckpt_init();
 	msg_allocator_init();
 	msg_queue_init();
 	model_allocator_init();
 	sync_thread_barrier();
-	
+#ifdef PUBSUB
 	pubsub_module_init();
-	
+#endif
 	lp_init();
 	process_init();
 
@@ -67,12 +70,18 @@ static void worker_thread_fini(void)
 
 	process_fini();
 	lp_fini();
+#ifdef PUBSUB
 	pubsub_module_fini();
+#endif
+#ifdef NEURAL
 	snn_module_fini();
+#endif
 	model_allocator_fini();
 	msg_queue_fini();
 	sync_thread_barrier();
 	msg_allocator_fini();
+
+	retractable_module_fini();
 }
 
 static thr_ret_t THREAD_CALL_CONV parallel_thread_run(void *rid_arg)
@@ -124,7 +133,9 @@ static void parallel_global_init(void)
 static void parallel_global_fini(void)
 {
 	msg_queue_global_fini();
+#ifdef PUBSUB
 	pubsub_module_global_fini();
+#endif
 	lp_global_fini();
 	process_global_fini();
 	lib_global_fini();

@@ -12,6 +12,8 @@
 #include <datatypes/msg_queue.h>
 #include <lp/lp.h>
 
+#include <modules/retractable/retractable.h>
+
 #include <memory.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -28,6 +30,7 @@ static struct lp_ctx lps_m[THREAD_CNT];
 static atomic_uint msg_missing = THREAD_REPS * THREAD_CNT;
 static atomic_uint msg_to_free = THREAD_CNT;
 uint64_t lid_node_first;
+__thread r_queue_t r_queue = {0};
 
 struct lp_ctx *lps = lps_m;
 

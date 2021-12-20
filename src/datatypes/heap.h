@@ -46,16 +46,14 @@
  */
 #define heap_insert(self, cmp_f, elem)					\
 __extension__({								\
-	array_reserve(self, 1);						\
+	array_reserve_one(self);					\
 	__typeof(array_count(self)) i = array_count(self)++;		\
 	__typeof__(array_items(self)) items = array_items(self);	\
 	while (i && cmp_f(elem, items[(i - 1U) / 2U])) {		\
 		items[i] = items[(i - 1U) / 2U];			\
-		items[i].m->pos = i;					\
 		i = (i - 1U) / 2U;					\
 	}								\
 	items[i] = elem;						\
-	items[i].m->pos = i;						\
 	i;								\
 })
 
@@ -78,11 +76,9 @@ __extension__({								\
 		__typeof(array_count(self)) i = array_count(self)++;	\
 		while (i && cmp_f(ins[j], items[(i - 1U) / 2U])) {	\
 			items[i] = items[(i - 1U) / 2U];		\
-			items[i].m->pos = i;				\
 			i = (i - 1U) / 2U;				\
 		}							\
 		items[i] = ins[j];					\
-		items[i].m->pos = i;					\
 	}								\
 })
 
@@ -105,57 +101,13 @@ __extension__({								\
 	__typeof(array_count(self)) j = 0U;				\
 	while (i < cnt) {						\
 		i += i + 1 < cnt && cmp_f(items[i + 1U], items[i]);	\
-		if (!cmp_f(items[i], last)) {				\
-                        break;						\
-		}							\
+		if (!cmp_f(items[i], last))				\
+			break;						\
 		items[j] = items[i];					\
-		items[j].m->pos = j;					\
 		j = i;							\
 		i = i * 2U + 1U;					\
 	}								\
 	items[j] = last;						\
-	items[j].m->pos = j;						\
 	ret;								\
 })
 
-/**
- * @brief Moves an element in the heap according to new priority
- * @param self the heap in which to move the element
- * @param cmp_f a comparing function f(a, b) which returns true iff a < b
- *
- * For correct operation of the heap you need to always pass the same @a cmp_f
- * both for insertion, extraction and priority change
- */
-#define heap_priority_changed(self, elem, cmp_f)			\
-__extension__({								\
-	__typeof(array_count(self)) i = elem.m->pos;			\
-	__typeof__(array_items(self)) items = array_items(self);	\
-	__typeof(array_count(self)) cnt = array_count(self);		\
-									\
-	if(i && cmp_f(elem, items[(i - 1U) / 2U])) {			\
-									\
-	while(i && cmp_f(elem, items[(i - 1U) / 2U])){			\
-		items[i] = items[(i - 1U) / 2U];			\
-		items[i].m->pos = i;					\
-		i = (i - 1U) / 2U;					\
-	}								\
-	items[i] = elem;						\
-	items[i].m->pos = i;						\
-									\
-	} else {							\
-									\
-	i = i * 2U + 1U;						\
-	while (i < cnt) {						\
-		i += i + 1 < cnt && cmp_f(items[i + 1U], items[i]);	\
-		if (!cmp_f(items[i], elem)) {				\
-			break;						\
-		}							\
-		items[(i - 1U) / 2U] = items[i];			\
-		items[(i - 1U) / 2U].m->pos = (i - 1U) / 2U;		\
-		i = i * 2U + 1U;					\
-	}								\
-	items[(i - 1U) / 2U] = elem;					\
-	items[(i - 1U) / 2U].m->pos = (i - 1U) / 2U;			\
-									\
-	}								\
-})

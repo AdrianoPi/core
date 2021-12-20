@@ -118,11 +118,11 @@ void lp_init(void)
 
 #ifdef NEURAL
 	}
-	
+
 	sync_thread_barrier();
 	// Remember this is called once per thread
 	snn_module_init();
-	
+
 	sync_thread_barrier();
 
 	for (uint64_t i = lid_thread_first; i < lid_thread_end; ++i) {
@@ -155,7 +155,9 @@ void lp_fini(void)
 		lib_lp_fini_pr();
 		model_allocator_lp_fini();
         	retractable_module_lp_fini();
+#ifdef PUBSUB
 		pubsub_module_lp_fini();
+#endif
 	}
 
 	current_lp = NULL;

@@ -42,8 +42,8 @@ void ScheduleNewEvent_pr(lp_id_t receiver, simtime_t timestamp,
 	struct lp_msg *msg = msg_allocator_pack(receiver, timestamp, event_type,
 		payload, payload_size);
 
-#if LOG_LEVEL <= LOG_DEBUG
 	msg->send = current_lp - lps;
+#if LOG_LEVEL <= LOG_DEBUG
 	msg->send_t = proc_p->last_t;
 #endif
 
@@ -172,9 +172,8 @@ static inline void silent_execution(const struct process_data *proc_p,
 			msg = array_get_at(proc_p->p_msgs, ++last_i);
 		}
 
-		if(unlikely(is_retractable(msg))){
+		if(unlikely(is_retractable(msg)))
 			DescheduleRetractableEvent();
-		}
 
 		ProcessEvent_pr(
 			msg->dest,
@@ -354,7 +353,7 @@ void process_msg(void)
 #ifdef PUBSUB
 	if(is_pubsub_msg(msg)){
 		// A pubsub message that needs to be unpacked
-		if(unlikely(msg->flags & MSG_FLAG_ANTI)){
+		if(unlikely(msg->raw_flags & MSG_FLAG_ANTI)){
 			thread_handle_published_antimessage(msg);
 		} else {
 			thread_handle_published_message(msg);
@@ -374,7 +373,7 @@ void process_msg(void)
 
 	// Is the message retractable AND valid?
 	if(unlikely(is_ret)){
-		if(!is_valid_retractable(msg)){
+		if(!is_valid_retractable(msg)) {
 			msg->dest_t = -1;
 			DescheduleRetractableEvent();// Actually probably not needed
 			return;

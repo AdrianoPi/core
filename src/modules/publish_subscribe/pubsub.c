@@ -57,6 +57,7 @@ typedef dyn_array(table_thread_entry_t) t_entry_arr;
 
 t_entry_arr *subscribersTable;
 spinlock_t *tableLocks;
+__thread struct lp_msg* delivered_pubsub = NULL;
 
 /// List of functions wrapping macros to make them available when debugging
 #if LOG_LEVEL <= LOG_DEBUG
@@ -556,20 +557,24 @@ void thread_handle_published_message(struct lp_msg* msg){
 
 			atomic_store_explicit(&child_msg->flags, 0U, memory_order_relaxed);
 
-			msg_queue_insert(child_msg);
+			// UPDATED: now we directly process the message.
+			// This way we do not need to insert in Q. Besides, these messages
+			// would have been the next ones to be processed anyway.
+			process_msg(child_msg);
 
 		} else { // SubscribeAndHandle
 			// Set the current LP to the target lp's id
 			struct lp_ctx* this_lp = &lps[target_lid];
 			current_lp = this_lp;
 
-			struct process_data *proc_p = &current_lp->p;
-
 			// Get user-provided data from entry
 			void *usr_data = c_lp_entry.data;
 
 			// > Invoke the handler with correct data and lp_id
-			//ProcessPublishedEvent_pr(
+			// UPDATE: now ProcessPublishedEvent does not schedule
+			// a message but, rather, provides the information needed
+			// to process the event via PubsubDeliver.
+			// The event is then processed here.
 			ProcessPublishedEvent(
 				current_lid,
 				msg->dest_t,
@@ -579,14 +584,16 @@ void thread_handle_published_message(struct lp_msg* msg){
 				usr_data
 			);
 
-			// Flags and all initialized in ScheduleNewEvent
-
-			// Pop the created message from sent_msgs
-			child_msg = unmark_msg(array_pop(proc_p->p_msgs));
+			// Flags initialized in PubsubDeliver
+			child_msg = delivered_pubsub;
+			delivered_pubsub = NULL;
 #if LOG_LEVEL <= LOG_DEBUG
 			child_msg->send = msg->send;
 			child_msg->send_t = msg->send_t;
 #endif
+
+			// Updated: child message is now processed here
+			process_msg(child_msg);
 		}
 
 		// Keep track of the child message
@@ -640,6 +647,27 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 	atomic_store_explicit(&msg->flags, MSG_FLAG_PUBSUB, memory_order_relaxed);
 
 	array_push(proc_p->p_msgs, mark_msg_remote(msg));
+}
+
+inline void PubsubDeliver_pr(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size){
+	PubsubDeliver(timestamp, event_type, event_content, event_size);
+}
+
+void PubsubDeliver(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size){
+	if (delivered_pubsub){
+		printf("A PubSub message was being delivered twice! Exiting...\n");
+		abort();
+	}
+	delivered_pubsub = msg_allocator_pack(
+		current_lid,
+		timestamp,
+		event_type,
+		event_content,
+		event_size
+	);
+
+	// Message is directed to self.
+	delivered_pubsub->raw_flags = 0U;
 }
 
 // Ok?

@@ -343,13 +343,22 @@ static inline bool check_early_anti_messages(struct lp_msg *msg)
  *
  * This function encloses most of the actual simulation logic.
  */
-void process_msg(void)
-{
+void process_next_msg(void) {
 	struct lp_msg *msg = msg_queue_extract();
 	if (unlikely(!msg)) {
 		current_lp = NULL;
 		return;
 	}
+	process_msg(msg);
+}
+
+void process_msg(struct lp_msg* msg) {
+
+	// FIXME: Assume msg is always not null??
+//	if (unlikely(!msg)) {
+//		current_lp = NULL;
+//		return;
+//	}
 
 #ifdef PUBSUB
 	if(is_pubsub_msg(msg)){

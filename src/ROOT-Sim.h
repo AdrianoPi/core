@@ -53,6 +53,8 @@ extern void ScheduleNewEvent(lp_id_t receiver, simtime_t timestamp,
 #ifdef PUBSUB
 // For publish-subscribe messages
 extern void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* user_data);
+/// To be called from within ProcessPublishedEvent to complete the unpacking of the message.
+extern void PubsubDeliver(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size);
 extern void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size);
 extern void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id);
 extern void SubscribeAndHandle(lp_id_t subscriber_id, lp_id_t publisher_id, void* data);

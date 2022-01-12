@@ -39,4 +39,5 @@ extern void process_lp_init(void);
 extern void process_lp_deinit(void);
 extern void process_lp_fini(void);
 
-extern void process_msg(void);
+extern void process_next_msg(void);
+extern void process_msg(struct lp_msg* msg);

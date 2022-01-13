@@ -120,23 +120,34 @@ unsigned int* bg_layer;
 
 FILE* outFile = NULL;
 
+unsigned int v0type = 0;
+double original_v0_mean[] = {-58.0, -58.0, -58.0, -58.0, -58.0, -58.0, -58.0, -58.0};
+double original_v0_std[] = {10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0};
+double optimized_v0_mean[] = {-68.28, -63.16, -63.33, -63.45, -63.11, -61.66, -66.72, -61.43};
+double optimized_v0_std[] = {5.36, 4.57, 4.74, 4.94, 4.94, 4.55, 5.46, 4.48};
+double* v0_mean = optimized_v0_mean;
+double* v0_std = optimized_v0_std;
+
+
 enum{
 	OPT_PROTOCOL = 129,
+	OPT_V0_TYPE = 130
 };
 
 struct ap_option model_options[] = {
-	// FIXME: Protocols 2, 3 and 4 run a series of experiments. Remove them.
-	{"protocol", OPT_PROTOCOL, "UNSIGNED INT",
+	{"protocol", OPT_PROTOCOL, "VALUE",
 		"Protocol to run the simulation with.\n\
-		protocol = 0:   spontaneous activity (figure 2)\n\
-		protocol = 1:   DC input and layer-independent experiments (figures 5A and 5B)\n\
-		protocol = 2:   layer-independent randomized to generate histograms in figure 5C\n\
-		protocol = 3:   dependence of network activity on the background firing rate (bg)\
-		and the relative inhibitory synaptic strength (g) (figure 6)\n\
-		protocol = 4:   comparison of spontaneous activity using equations 3 or 4 from\
-		paper to calculate the number of synapses between populations\n\
-		protocol = 5:   response to transient thalamic input"
-		},
+\tprotocol = 0: spontaneous activity (figure 2)\n\
+\tprotocol = 1: DC input and layer-independent experiments\n\
+\tprotocol = 5: response to transient thalamic input\n"
+	},
+	{"v0", OPT_V0_TYPE, "VALUE",
+		"Initial conditions for membrane potential.\n\
+\tv0 = 0: Optimized - population-specific mean and standard deviation, allowing\
+a reduction of the initial activity burst in the network (default)\n\
+\tv0 = 1: Original - uniform mean and standard deviation for all populations as\
+used in earlier implementations of the model\n"
+	},
 	{0}
 };
 
@@ -185,6 +196,37 @@ void model_parse (int key, const char *arg){
 			
 			break;
 			
+		}
+		case OPT_V0_TYPE:
+		{
+			if(sscanf(arg, "%u", &v0type) != 1) {
+				printf("Could not parse v0 option\n");
+				abort();
+			}
+			switch(v0type){
+				case 0:
+				{
+					// Optimized
+					v0_mean = optimized_v0_mean;
+					v0_std = optimized_v0_std;
+					break;
+				}
+				case 1:
+				{
+					// Original
+					v0_mean = original_v0_mean;
+					v0_std = original_v0_std;
+					break;
+				}
+				default:
+				{
+					printf("Initial membrane potential (V0) not recognized\n");
+					abort();
+				}
+			}
+
+			break;
+
 		}
 		default:
 		{
@@ -241,7 +283,7 @@ neuron_state_t* InitLIFNeuron(unsigned long int me){
 	state->I = 0.0;
 	state->last_fired = -(n_params.refractory_period + 1);
 	
-	state->membrane_potential = -58.0 + 10 * Normal();
+	state->membrane_potential = v0_mean[pop] + v0_std[pop] * Normal();
 	if(state->membrane_potential > n_params.threshold){
 		state->membrane_potential = n_params.threshold + 0.01;
 	}
@@ -477,9 +519,10 @@ void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 	//###########################################################################
 	//# Creating spike monitors
 	//###########################################################################
-	for(unsigned long int i=0; i<nn_cum[7]; i++){ //Probe every neuron
-		NewProbe(i);
-	}
+//	for(unsigned long int i=0; i<nn_cum[7]; i++){ //Probe every neuron
+//		NewProbe(i);
+//	}
+	NewProbe(0);
 	
 	if(bg_type==2){free(bg_layer);}
 }

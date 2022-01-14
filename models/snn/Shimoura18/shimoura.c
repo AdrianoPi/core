@@ -24,7 +24,7 @@
 
 #define CONNECTIONS 1
 
-unsigned long long int syn_ct = 0;
+__thread unsigned long long int syn_ct = 0;
 
 // Parameters used in Shimoura18
 const struct neuron_params_t n_params = {
@@ -262,7 +262,7 @@ neuron_state_t* InitLIFNeuron(unsigned long int me){
 			n_helper->Iext = (0.3512*bg_layer[pop]);
 			//~ my_st_params->Iext = g_I_ext;
 			//~ my_st_params->Iext = 0;
-			printf("Iext: %lf\n", n_helper->Iext);
+			//printf("Iext: %lf\n", n_helper->Iext);
 		} else {
 			n_helper->Iext = 0;
 		}
@@ -272,9 +272,9 @@ neuron_state_t* InitLIFNeuron(unsigned long int me){
 		printdbg("A0: %lf, A2: %lf\n", n_helper_p->A0, n_helper_p->A2);
 		
 		n_helper->Icond = ((n_params.threshold - n_params.reset_potential) * (n_params.inv_tau_m)) / n_params.inv_C_m - (n_helper->Iext);
-		printf("Neuron population %d Icond: %lf\n", pop, n_helper->Icond);
+		//printf("Neuron population %d Icond: %lf\n", pop, n_helper->Icond);
 		n_helper->self_spike_time = getSelfSpikeTime(n_helper);
-		printf("Neuron population %d self spike time: %lf\n", pop, n_helper->self_spike_time);
+		//printf("Neuron population %d self spike time: %lf\n", pop, n_helper->self_spike_time);
 	}
 	
 	state->helper = n_helper;
@@ -448,11 +448,11 @@ void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 			if (nsyn_type==0){
 				// number of synapses calculated with equation 3 from the article
 				nsyn = log(1.0-table[r][c])/log(1.0 - (1.0/(n_layer[c]*n_layer[r])));
-				printf("NSYN from %d to %d: %d\n", c, r, nsyn);
+				//printf("NSYN from %d to %d: %d\n", c, r, nsyn);
 			} else if (nsyn_type==1) {
 				// number of synapses calculated with equation 5 from the article
 				nsyn = table[r][c]*n_layer[c]*n_layer[r];
-				printf("NSYN from %d to %d: %d\n", c, r, nsyn);
+				//printf("NSYN from %d to %d: %d\n", c, r, nsyn);
 			}
 
 			syn_ct += nsyn;
@@ -497,7 +497,7 @@ void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 	if(thal==1){
 		for (int r = 0; r<8; r++) {
 			nsyn = (table[r][8]*n_layer[8]*n_layer[r]);
-			printf("NSYN from 8 to %d: %d\n", r, nsyn);
+			//printf("NSYN from 8 to %d: %d\n", r, nsyn);
 			
 			for(int i=0; i<nsyn; i++){
 				src_neuron = (unsigned long int) (Random()*(n_layer[8])) + nn_cum[8];

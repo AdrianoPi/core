@@ -647,8 +647,6 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 void sub_node_handle_published_antimessage(struct lp_msg *msg){
 	// FIXME: is the usage of flags disruptive for the mpi organization??
 
-	msg->raw_flags += MSG_FLAG_PUBSUB;
-
 	// On sub nodes, just create thread-level copies
 	t_entry_arr threads = subscribersTable[msg->dest];
 
@@ -659,6 +657,8 @@ void sub_node_handle_published_antimessage(struct lp_msg *msg){
 		msg_allocator_free(msg);
 		return;
 	}
+
+	msg->raw_flags += MSG_FLAG_PUBSUB;
 
 	// For each subscribed Thread
 	for(int c=0; c < n_ch_count; c++){

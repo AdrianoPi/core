@@ -592,8 +592,14 @@ void thread_handle_published_message(struct lp_msg* msg){
 			child_msg->send_t = msg->send_t;
 #endif
 
-			// Updated: child message is now processed here
-			process_msg(child_msg);
+
+			if (current_lp->lib_ctx_p->r_ts > 0 && child_msg->dest_t > current_lp->lib_ctx_p->r_ts){
+				// Cannot process. Push child message in queue
+				msg_queue_insert(child_msg);
+			} else {
+				// Updated: child message is now processed here
+				process_msg(child_msg);
+			}
 		}
 
 		// Keep track of the child message

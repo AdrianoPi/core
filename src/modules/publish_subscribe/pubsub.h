@@ -9,8 +9,6 @@
 #include <datatypes/bitmap.h>
 #include <distributed/mpi.h>
 
-// Size of additional data needed by pubsub messages published locally
-#define size_of_pubsub_info	(sizeof(size_t) + sizeof(struct lp_msg*))
 #define is_fresh_pubsub_msg(msg)	(lid_to_nid((msg)->dest) != nid)
 
 extern void pubsub_module_lp_init(void);

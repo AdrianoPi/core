@@ -20,6 +20,7 @@ extern void pubsub_module_fini(void);
 extern void pubsub_module_global_init(void);
 extern void pubsub_module_global_fini(void);
 extern void pubsub_on_gvt(simtime_t current_gvt);
+extern void print_pubsub_topology_to_file();
 
 /// Send an Event to all the subscribed LPs.
 extern void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size);

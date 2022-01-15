@@ -48,6 +48,7 @@ void msg_queue_insert_retractable()
 			current_lp->lib_ctx_p->r_e_type, NULL, 0);
 #if LOG_LEVEL <= LOG_DEBUG
 		msg->send_t = current_lp->p.last_t;
+		msg->send = current_lid;
 #endif
 		msg->flags = MSG_FLAG_RETRACTABLE;
 		current_lp->r_msg = msg;

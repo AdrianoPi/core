@@ -32,6 +32,8 @@
 
 #define current_lid (current_lp - lps)
 
+#define PUBSUB_PRINT_TOPOLOGY true
+
 #define mark_as_thread_lv(msg_p) ((struct lp_msg *)(((uintptr_t)(msg_p)) | 1U))
 #define is_thread_lv(msg_p) (((uintptr_t)(msg_p)) & 1U)
 #define unmark_msg(msg_p) \
@@ -211,12 +213,8 @@ void pubsub_module_global_init(){
 #endif
 }
 
-
-/// Last call to the pubsub module
-void pubsub_module_global_fini(){
-#if LOG_LEVEL <= LOG_DEBUG
-	log_log(LOG_DEBUG, "Starting pubsub_module_global_fini\n");
-
+void print_pubsub_topology_to_file(){
+	if(!PUBSUB_PRINT_TOPOLOGY) return;
 	// Print two json files:
 	// One is the subscribers table
 	// The other is an array that at index i contains the list of subscribers of LP i.
@@ -235,6 +233,12 @@ void pubsub_module_global_fini(){
 	free(fname);
 	pprint_subscribers_adjacency_list(f);
 	fclose(f);
+}
+
+/// Last call to the pubsub module
+void pubsub_module_global_fini(){
+#if LOG_LEVEL <= LOG_DEBUG
+	log_log(LOG_DEBUG, "Starting pubsub_module_global_fini\n");
 
 	// Free subscribersTable, its locks and its contents
 	mm_free(tableLocks);

@@ -12,6 +12,11 @@
 
 #define PUBSUB_PRINT_TOPOLOGY true
 
+#if LOG_LEVEL <= LOG_DEBUG
+// File for logging pubsub messages
+__thread FILE *pubsub_msgs_logfile;
+#endif
+
 #define mark_as_thread_lv(msg_p) ((struct lp_msg *)(((uintptr_t)(msg_p)) | 1U))
 #define is_thread_lv(msg_p) (((uintptr_t)(msg_p)) & 1U)
 #define unmark_msg(msg_p) \
@@ -159,7 +164,32 @@ void pubsub_module_global_fini(){
 void pubsub_module_init(){
 	array_init(past_pubsubs);
 	array_init(early_pubsub_antis);
+#if LOG_LEVEL <= LOG_DEBUG
+	// Open logging file
+	char* fname = malloc(strlen("pubsub_msgs_n_t.log") + 100);
+	sprintf(fname, "pubsub_msgs_n%d_t%d.log", nid, rid);
+	pubsub_msgs_logfile = fopen(fname, "w");
+	fprintf(pubsub_msgs_logfile, "LP, send_time\n");
+	free(fname);
+#endif
 }
+
+#if LOG_LEVEL <= LOG_DEBUG
+// FIXME: could this log a message twice if it is the last one of the array?
+void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size, simtime_t max_time){
+	// Since dyn_arrays are unnamed structs, we work with the items element
+	for(array_count_t i=0; i<size; i++){
+		struct lp_msg* msg = unmark_msg(msg_array[i]);
+		if (msg->dest_t > max_time){
+			return;
+		}
+		// Only log pubsubs that have not been undone
+		if(is_pubsub_msg(msg) && !(msg->flags & MSG_FLAG_ANTI)){
+			fprintf(pubsub_msgs_logfile, "%lu, %lf\n", msg->send, msg->send_t);
+		}
+	}
+}
+#endif
 
 void pubsub_module_fini(){
 	for (array_count_t i = 0; i < array_count(past_pubsubs); ++i) {
@@ -176,6 +206,10 @@ void pubsub_module_fini(){
 		msg_allocator_free(array_get_at(early_pubsub_antis, i));
 	}
 	array_fini(early_pubsub_antis);
+
+#if LOG_LEVEL <= LOG_DEBUG
+	fclose(pubsub_msgs_logfile);
+#endif
 }
 
 /// This is called when a local LP publishes a message.

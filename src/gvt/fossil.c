@@ -25,6 +25,13 @@ void fossil_lp_on_gvt(struct lp_ctx *lp, simtime_t current_gvt)
 	if (past_i == 0)
 		return;
 
+#if LOG_LEVEL <= LOG_DEBUG && defined(PUBSUB)
+	// We want to log committed pubsub messages this lp has sent
+	log_pubsub_msgs_to_file(proc_p->p_msgs.items,
+				array_count(proc_p->p_msgs),
+				current_gvt);
+#endif
+
 	const struct lp_msg *msg = array_get_at(proc_p->p_msgs, --past_i);
 	do {
 		if (msg->dest_t < current_gvt)

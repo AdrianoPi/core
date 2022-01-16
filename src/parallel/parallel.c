@@ -46,6 +46,10 @@ static void worker_thread_init(rid_t this_rid)
 	lp_init();
 	process_init();
 
+#if LOG_LEVEL <= LOG_DEBUG && defined(PUBSUB)
+	print_pubsub_topology_to_file();
+#endif
+
 #ifdef ROOTSIM_MPI
 	if (sync_thread_barrier())
 		mpi_node_barrier();

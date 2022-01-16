@@ -5,8 +5,8 @@
 #include <limits.h>		// for CHAR_BIT
 #include <lp/process.h>
 
-#define n_pub_info_ptr(msg) ((struct n_pubsub_info *)((msg)->pl + (msg)->pl_size))
-#define t_pub_info_ptr(msg) ((struct t_pubsub_info *)((msg)->pl + (msg)->pl_size))
+#define n_pub_info_ptr(msg) ((struct n_pubsub_info *)((msg)->pl + (msg)->pl_size - sizeof(struct n_pubsub_info)))
+#define t_pub_info_ptr(msg) ((struct t_pubsub_info *)((msg)->pl + (msg)->pl_size - sizeof(struct t_pubsub_info)))
 
 #define LP_ID_MSB (((lp_id_t) 1) << (sizeof(lp_id_t) * CHAR_BIT - 1))
 
@@ -61,7 +61,7 @@ static void pubsub_insert_in_past(struct lp_msg *msg)
 
 	do {
 		--i;
-	} while(time >= array_get_at(past_pubsubs, i - 1)->dest_t);
+	} while(i && time >= array_get_at(past_pubsubs, i - 1)->dest_t);
 
 	array_add_at(past_pubsubs, i, msg);
 }
@@ -274,10 +274,8 @@ void sub_node_handle_published_message(struct lp_msg* msg)
 
 	// One message per thread
 	int n_ch_count = array_count(threads);
-	if (!n_ch_count) { // The entry of the publisher LP does not exist.
-		msg_allocator_free(msg);
-		return;
-	}
+
+	assert(n_ch_count);
 
 	size_t child_pl_size = msg->pl_size + sizeof(struct t_pubsub_info);
 	// Visualization of child's payload once populated:

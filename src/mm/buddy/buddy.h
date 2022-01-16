@@ -16,8 +16,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define B_TOTAL_EXP 17U
-#define B_BLOCK_EXP 6U
+#define B_TOTAL_EXP 8U
+#define B_BLOCK_EXP 4U
 
 #define buddy_left_child(i) (((i) << 1U) + 1U)
 #define buddy_right_child(i) (((i) << 1U) + 2U)

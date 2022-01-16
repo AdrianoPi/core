@@ -491,7 +491,7 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 /// This carries out the antimessaging when the node received the antimessage via MPI
 void sub_node_handle_published_antimessage(struct lp_msg *msg)
 {
-	// FIXME: is the usage of flags disruptive for the mpi organization??
+	// This flag is only set here to propagate it to children messages
 	msg->raw_flags += MSG_FLAG_PUBSUB;
 
 	// On sub nodes, just create thread-level copies
@@ -515,6 +515,9 @@ void sub_node_handle_published_antimessage(struct lp_msg *msg)
 		// Push child message into target thread's incoming queue
 		pubsub_msg_queue_insert(child_msg);
 	}
+
+	// Remove the flag to make it be freed as a normal msg
+	msg->raw_flags -= MSG_FLAG_PUBSUB;
 
 	/* This msg is only a blueprint: Free it right now */
 	msg_allocator_free(msg);
@@ -707,11 +710,8 @@ void SubscribeAndHandle(lp_id_t dirty_subscriber_id, lp_id_t publisher_id, void*
 	bool sub_is_local = lid_to_nid(subscriber_id)==nid && lid_to_rid(subscriber_id)==rid;
 	bool pub_is_local = lid_to_nid(publisher_id)==nid && lid_to_rid(publisher_id)==rid;
 
-	if(pub_is_local){ // If the publisher is managed by local thread
+	if(pub_is_local && !sub_is_local){ // If the publisher is managed by local thread
 		add_subbed_node(subscriber_id, publisher_id);
-	}
-
-	if (!sub_is_local){ // Nothing else left to do
 		return;
 	}
 

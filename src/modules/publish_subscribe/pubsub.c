@@ -180,7 +180,7 @@ void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size, simt
 	// Since dyn_arrays are unnamed structs, we work with the items element
 	for(array_count_t i=0; i<size; i++){
 		struct lp_msg* msg = unmark_msg(msg_array[i]);
-		if (msg->dest_t > max_time){
+		if (msg->dest_t > max_time || msg->dest_t > global_config.termination_time){
 			return;
 		}
 		// Only log pubsubs that have not been undone

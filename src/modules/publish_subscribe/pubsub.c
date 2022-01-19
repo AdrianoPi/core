@@ -457,8 +457,6 @@ void thread_handle_published_message(struct lp_msg* msg){
 			struct lp_ctx* this_lp = &lps[target_lid];
 			current_lp = this_lp;
 
-			struct process_data *proc_p = &current_lp->p;
-
 			// Get user-provided data from entry
 			void *usr_data = c_lp_entry.data;
 

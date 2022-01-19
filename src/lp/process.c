@@ -369,6 +369,7 @@ void process_msg(struct lp_msg *msg)
 {
 
 	assert(msg->dest_t >= actual_gvt);
+	gvt_on_msg_extraction(msg->dest_t);
 
 #ifdef PUBSUB
 	if(is_pubsub_msg(msg)){
@@ -401,7 +402,6 @@ void process_msg(struct lp_msg *msg)
 	}
 //#endif
 
-	gvt_on_msg_extraction(msg->dest_t);
 
 	uint32_t flags = atomic_fetch_add_explicit(&msg->flags,
 			MSG_FLAG_PROCESSED, memory_order_relaxed);

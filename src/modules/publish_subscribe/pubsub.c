@@ -158,7 +158,6 @@ void pubsub_module_global_fini(){
 
 	log_log(LOG_DEBUG, "Ending pubsub_module_global_fini\n");
 #endif
-	return;
 }
 
 void pubsub_module_init(){
@@ -169,6 +168,7 @@ void pubsub_module_init(){
 	char* fname = malloc(strlen("pubsub_msgs_n_t.log") + 100);
 	sprintf(fname, "pubsub_msgs_n%d_t%d.log", nid, rid);
 	pubsub_msgs_logfile = fopen(fname, "w");
+	setvbuf(pubsub_msgs_logfile, NULL, _IOFBF, 4096);
 	fprintf(pubsub_msgs_logfile, "LP, send_time\n");
 	free(fname);
 #endif
@@ -178,13 +178,16 @@ void pubsub_module_init(){
 // FIXME: could this log a message twice if it is the last one of the array?
 void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size, simtime_t max_time){
 	// Since dyn_arrays are unnamed structs, we work with the items element
-	for(array_count_t i=0; i<size; i++){
+	for(array_count_t i = 0; i < size; i++){
 		struct lp_msg* msg = unmark_msg(msg_array[i]);
-		if (msg->dest_t > max_time || msg->dest_t > global_config.termination_time){
+		if (msg->dest_t > global_config.termination_time){
 			return;
 		}
+
+		assert(!(msg->raw_flags & MSG_FLAG_ANTI));
+
 		// Only log pubsubs that have not been undone
-		if(is_pubsub_msg(msg) && !(msg->flags & MSG_FLAG_ANTI)){
+		if(is_pubsub_msg(msg)){
 			fprintf(pubsub_msgs_logfile, "%lu, %lf\n", msg->send, msg->send_t);
 		}
 	}

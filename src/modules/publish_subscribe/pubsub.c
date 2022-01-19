@@ -14,7 +14,7 @@
 
 #if LOG_LEVEL <= LOG_DEBUG
 // File for logging pubsub messages
-__thread FILE *pubsub_msgs_logfile;
+static __thread FILE *pubsub_msgs_logfile;
 #endif
 
 #define mark_as_thread_lv(msg_p) ((struct lp_msg *)(((uintptr_t)(msg_p)) | 1U))
@@ -54,6 +54,7 @@ struct t_pubsub_info {
 
 t_entry_arr *subscribersTable;
 spinlock_t *tableLocks;
+static __thread struct lp_msg *delivered_pubsub = NULL;
 
 /// Adds to past_pubsubs maintaining ordering
 static void pubsub_insert_in_past(struct lp_msg *msg)
@@ -472,14 +473,15 @@ void thread_handle_published_message(struct lp_msg* msg){
 				usr_data
 			);
 
-			// Flags and all initialized in ScheduleNewEvent
+			// Flags initialized in PubsubDeliver
+			child_msg = delivered_pubsub;
+			delivered_pubsub = NULL;
 
-			// Pop the created message from sent_msgs
-			child_msg = unmark_msg(array_pop(proc_p->p_msgs));
-#if LOG_LEVEL <= LOG_DEBUG
 			child_msg->send = msg->send;
+#if LOG_LEVEL <= LOG_DEBUG
 			child_msg->send_t = msg->send_t;
 #endif
+			msg_queue_insert(child_msg);
 		}
 
 		// Keep track of the child message
@@ -526,6 +528,27 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 	// Do this after making copies, or it will dirty MPI messages!
 	msg->raw_flags = MSG_FLAG_PUBSUB;
 	array_push(proc_p->p_msgs, mark_msg_remote(msg));
+}
+
+inline void PubsubDeliver_pr(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size){
+	PubsubDeliver(timestamp, event_type, event_content, event_size);
+}
+
+void PubsubDeliver(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size){
+	if (delivered_pubsub){
+		printf("A PubSub message was being delivered twice! Exiting...\n");
+		abort();
+	}
+	delivered_pubsub = msg_allocator_pack(
+		current_lp - lps,
+		timestamp,
+		event_type,
+		event_content,
+		event_size
+	);
+
+	// Message is directed to self.
+	delivered_pubsub->raw_flags = 0U;
 }
 
 // Ok?

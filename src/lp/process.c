@@ -349,16 +349,24 @@ static inline bool check_early_anti_messages(struct lp_msg *msg)
 
 /**
  * @brief extract and process a message, if available
- *
- * This function encloses most of the actual simulation logic.
  */
-void process_msg(void)
+void process_next_msg(void)
 {
 	struct lp_msg *msg = msg_queue_extract();
 	if (unlikely(!msg)) {
 		current_lp = NULL;
 		return;
 	}
+	process_msg(msg);
+}
+
+/**
+ * @brief process a message
+ *
+ * This function encloses most of the actual simulation logic.
+ */
+void process_msg(struct lp_msg *msg)
+{
 
 	assert(msg->dest_t >= actual_gvt);
 

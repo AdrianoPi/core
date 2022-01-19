@@ -36,6 +36,9 @@ extern void SubscribeAndHandle(lp_id_t subscriber_id, lp_id_t publisher_id, void
  * Failure to do so will result in the simulation crashing/results being incorrect.
  */
 extern void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, const void* msg_content, unsigned int size, const void* user_data);
+/* This function is called by the user from within ProcessPublishedEvent,
+ * to provide the results of the unpacking to the module */
+extern void PubsubDeliver(simtime_t timestamp, unsigned event_type, const void *event_content, unsigned event_size);
 
 extern void pub_node_handle_published_message(struct lp_msg* msg);
 extern void sub_node_handle_published_message(struct lp_msg* msg);

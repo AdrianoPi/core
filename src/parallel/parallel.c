@@ -101,7 +101,7 @@ static thr_ret_t THREAD_CALL_CONV parallel_thread_run(void *rid_arg)
 
 		unsigned i = 64;
 		while (i--) {
-			process_msg();
+			process_next_msg();
 		}
 
 		simtime_t current_gvt;

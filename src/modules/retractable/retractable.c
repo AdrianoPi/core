@@ -91,6 +91,8 @@ void retractable_rollback_handle(void)
 
 void ScheduleRetractableEvent_pr(simtime_t timestamp, unsigned event_type)
 {
+	assert(timestamp >= current_lp->p.last_t);
+
 	current_lp->lib_ctx_p->r_ts = timestamp;
 	current_lp->lib_ctx_p->r_e_type = event_type;
 

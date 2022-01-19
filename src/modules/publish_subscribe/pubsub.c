@@ -176,7 +176,7 @@ void pubsub_module_init(){
 
 #if LOG_LEVEL <= LOG_DEBUG
 // FIXME: could this log a message twice if it is the last one of the array?
-void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size, simtime_t max_time){
+void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 	// Since dyn_arrays are unnamed structs, we work with the items element
 	for(array_count_t i = 0; i < size; i++){
 		struct lp_msg* msg = unmark_msg(msg_array[i]);
@@ -500,6 +500,8 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 {
 	if(silent_processing)
 		return;
+
+	assert(timestamp >= current_lp->p.last_t);
 
 	struct process_data *proc_p = &current_lp->p;
 

@@ -38,6 +38,8 @@ void ScheduleNewEvent_pr(lp_id_t receiver, simtime_t timestamp,
 	if (unlikely(silent_processing))
 		return;
 
+	assert(timestamp >= current_lp->p.last_t);
+
 	struct process_data *proc_p = &current_lp->p;
 	struct lp_msg *msg = msg_allocator_pack(receiver, timestamp, event_type,
 		payload, payload_size);
@@ -147,8 +149,7 @@ void process_lp_fini(void)
 	// FIXME: does this work if termination time is not specified?
 	// We want to log committed pubsub messages this lp has sent
 	log_pubsub_msgs_to_file(proc_p->p_msgs.items,
-				array_count(proc_p->p_msgs),
-				global_config.termination_time);
+				array_count(proc_p->p_msgs));
 #endif
 
 	for (array_count_t i = 0; i < array_count(proc_p->p_msgs); ++i) {
@@ -358,6 +359,8 @@ void process_msg(void)
 		current_lp = NULL;
 		return;
 	}
+
+	assert(msg->dest_t >= actual_gvt);
 
 #ifdef PUBSUB
 	if(is_pubsub_msg(msg)){

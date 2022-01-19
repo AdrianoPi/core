@@ -14,7 +14,9 @@
 #include <lp/msg.h>
 
 extern __thread bool silent_processing;
-
+#if LOG_LEVEL <= LOG_DEBUG
+extern __thread simtime_t actual_gvt;
+#endif
 /// The message processing data produced by the LP
 struct process_data {
 	/// The messages processed in the past by the owner LP

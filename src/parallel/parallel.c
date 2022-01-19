@@ -30,6 +30,10 @@
 
 #include <modules/retractable/retractable.h>
 
+#if LOG_LEVEL <= LOG_DEBUG
+__thread simtime_t actual_gvt = -1;
+#endif
+
 static void worker_thread_init(rid_t this_rid)
 {
 	rid = this_rid;
@@ -109,6 +113,9 @@ static thr_ret_t THREAD_CALL_CONV parallel_thread_run(void *rid_arg)
 			pubsub_on_gvt(current_gvt);
 #endif
 			stats_on_gvt(current_gvt);
+#if LOG_LEVEL <= LOG_DEBUG
+			actual_gvt = current_gvt;
+#endif
 		}
 	}
 

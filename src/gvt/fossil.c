@@ -42,9 +42,7 @@ void fossil_lp_on_gvt(struct lp_ctx *lp, simtime_t current_gvt)
 
 #if LOG_LEVEL <= LOG_DEBUG && defined(PUBSUB)
 	// We want to log committed pubsub messages this lp has sent
-	log_pubsub_msgs_to_file(proc_p->p_msgs.items,
-				past_i,
-				current_gvt);
+	log_pubsub_msgs_to_file(proc_p->p_msgs.items, past_i);
 #endif
 
 	array_count_t k = past_i;

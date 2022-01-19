@@ -845,7 +845,9 @@ void pubsub_thread_msg_free(struct lp_msg* msg)
 	// No race conditions: either GVT>dest_t, or already antimsgd
 	msg->raw_flags &= ~MSG_FLAG_PUBSUB;
 
-	mm_free(t_pub_info_ptr(msg)->m_arr);
+	if(msg->pl_size)
+		mm_free(t_pub_info_ptr(msg)->m_arr);
+
 	msg_allocator_free(msg);
 }
 

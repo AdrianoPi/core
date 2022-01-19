@@ -16,7 +16,7 @@
 
 #define V_TOLERANCE 0.01 //mV
 #define I_TOLERANCE 0.01 //pA
-#define T_TOLERANCE 0.001 //mS
+#define T_TOLERANCE 0.01 //mS
 
 #define FIRE_THRESHOLD 800.0d
 
@@ -320,7 +320,7 @@ void NeuronHandleSpike(unsigned long int me, simtime_t now, double value, void* 
 	fireTime = getNextFireTime(state);
 	printdbg("[N%lu] Next spike time is %lf\n", me, fireTime);
 	
-	if (fireTime > -0.000001){ // Spike might happen in future
+	if (fireTime > 0.0){ // Spike might happen in future
 		MaybeSpikeAndWake(me, fireTime);
 	}
 	
@@ -373,7 +373,7 @@ void NeuronWake(unsigned long int me, simtime_t now, void* n_state){
 	fireTime = getNextFireTime(state);
 	printdbg("[N%lu] Next spike time is %lf\n", me, fireTime);
 	
-	if (fireTime > -0.000001){ // Spike might happen in future
+	if (fireTime > 0.0){ // Spike might happen in future
 		MaybeSpikeAndWake(me, fireTime);
 	}
 	return;

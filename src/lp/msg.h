@@ -15,6 +15,7 @@
 #include <stdatomic.h>
 #include <stddef.h>
 #include <limits.h>
+#include <datatypes/array.h>
 
 #define BASE_PAYLOAD_SIZE 16
 
@@ -26,7 +27,28 @@
 )
 
 #define msg_bare_size(msg) (offsetof(struct lp_msg, pl) + (msg)->pl_size)
-#define msg_anti_size() (offsetof(struct lp_msg, m_seq) + sizeof(uint32_t))
+#define msg_anti_size() (offsetof(struct lp_msg, m_type) + sizeof(uint32_t))
+
+typedef struct table_lp_entry_t{
+    lp_id_t lid;
+    void* data;
+} table_lp_entry_t;
+
+typedef dyn_array(table_lp_entry_t) lp_entry_arr;
+
+typedef struct table_thread_entry_t{
+    rid_t tid;
+    lp_entry_arr lp_arr;
+} table_thread_entry_t;
+
+typedef dyn_array(table_thread_entry_t) t_entry_arr;
+
+// Size of additional data needed by pubsub messages published locally
+struct t_pubsub_info {
+    size_t m_cnt;
+    struct lp_msg **m_arr;
+    lp_entry_arr *lp_arr_p;
+};
 
 /// A model simulation message
 struct lp_msg {
@@ -52,6 +74,9 @@ struct lp_msg {
 	uint32_t pl_size;
 	/// Position for heap data structure
 	uint_fast32_t pos;
+
+	struct t_pubsub_info pubsub_info;
+
 	/// The initial part of the payload
 	unsigned char pl[BASE_PAYLOAD_SIZE];
 	/// The continuation of the payload

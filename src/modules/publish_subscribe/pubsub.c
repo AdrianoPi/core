@@ -5,12 +5,13 @@
 #include <limits.h>		// for CHAR_BIT
 #include <lp/process.h>
 
-#define n_pub_info_ptr(msg) ((struct n_pubsub_info *)((msg)->pl + (msg)->pl_size - sizeof(struct n_pubsub_info)))
-#define t_pub_info_ptr(msg) ((struct t_pubsub_info *)((msg)->pl + (msg)->pl_size - sizeof(struct t_pubsub_info)))
-
 #define LP_ID_MSB (((lp_id_t) 1) << (sizeof(lp_id_t) * CHAR_BIT - 1))
 
 #define PUBSUB_PRINT_TOPOLOGY true
+
+bool bitmap_check_bit(struct block_bitmap* bitmap, int bit){
+	return bitmap_check(bitmap, bit);
+}
 
 #if LOG_LEVEL <= LOG_DEBUG
 // File for logging pubsub messages
@@ -25,32 +26,6 @@ static __thread FILE *pubsub_msgs_logfile;
 // Holds thread-level pubsub messages
 __thread dyn_array(struct lp_msg *) past_pubsubs;
 __thread dyn_array(struct lp_msg *) early_pubsub_antis;
-
-typedef struct table_lp_entry_t{
-	lp_id_t lid;
-	void* data;
-} table_lp_entry_t;
-
-typedef dyn_array(table_lp_entry_t) lp_entry_arr;
-
-typedef struct table_thread_entry_t{
-	rid_t tid;
-	lp_entry_arr lp_arr;
-} table_thread_entry_t;
-
-typedef dyn_array(table_thread_entry_t) t_entry_arr;
-
-// Size of additional data needed by pubsub messages published locally
-struct n_pubsub_info {
-	size_t m_cnt;
-	struct lp_msg **m_arr;
-};
-
-struct t_pubsub_info {
-	size_t m_cnt;
-	struct lp_msg **m_arr;
-	lp_entry_arr *lp_arr_p;
-};
 
 t_entry_arr *subscribersTable;
 spinlock_t *tableLocks;
@@ -176,7 +151,6 @@ void pubsub_module_init(){
 }
 
 #if LOG_LEVEL <= LOG_DEBUG
-// FIXME: could this log a message twice if it is the last one of the array?
 void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 	// Since dyn_arrays are unnamed structs, we work with the items element
 	for(array_count_t i = 0; i < size; i++){
@@ -227,7 +201,6 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 	 */
 
 	t_entry_arr threads = subscribersTable[msg->dest];
-	size_t stripped_payload_size = msg->pl_size - sizeof(struct n_pubsub_info);
 
 	// One message per thread
 	int n_ch_count = array_count(threads);
@@ -236,7 +209,7 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 	n_ch_count += current_lp->n_remote_sub_nodes;
 #endif
 
-	struct n_pubsub_info *n_pi = n_pub_info_ptr(msg);
+	struct t_pubsub_info *n_pi = &msg->pubsub_info;
 
 	n_pi->m_cnt = n_ch_count;
 	n_pi->m_arr = mm_alloc(sizeof(*n_pi->m_arr) * n_ch_count);
@@ -248,17 +221,18 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 	// Create and send messages to other nodes
 	int subbed_nodes = current_lp->n_remote_sub_nodes;
 	if (subbed_nodes) {
-		size_t stripped_msg_size = offsetof(struct lp_msg, pl) + stripped_payload_size;
 		struct block_bitmap *subs = current_lp->subnodes;
 		nid_t dest_nid = 0;
 		do {
-			while (!bitmap_check(subs, dest_nid))
+			//while (!bitmap_check(subs, dest_nid))
+			while (!bitmap_check_bit(subs, dest_nid))
 				++dest_nid;
 
 			struct lp_msg *mpi_msg = msg_allocator_alloc(
-					stripped_payload_size);
-			memcpy(mpi_msg, msg, stripped_msg_size);
-			mpi_msg->pl_size = stripped_payload_size;
+					msg->pl_size);
+			memcpy(mpi_msg, msg, msg_bare_size(msg));
+
+			assert(mpi_msg->dest==mpi_msg->send);
 
 			n_pi->m_arr[it] = mpi_msg;
 			++it;
@@ -269,8 +243,6 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 
 #endif
 
-	// Size of the payload of thread-level messages
-	size_t child_pl_size = stripped_payload_size + sizeof(struct t_pubsub_info);
 	// Visualization of *child_payload once populated:
 	// Offsets	:v-0       		v-original_pl_size
 	// Contents	:[ 	*(msg->pl) 	| 	&lp_arr	|	childCount	| lp_msg**	]
@@ -280,14 +252,12 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 
 		table_thread_entry_t *t_entry = &array_get_at(threads, c);
 
-		struct lp_msg *child_msg = msg_allocator_alloc(child_pl_size);
-		memcpy(child_msg, msg, offsetof(struct lp_msg, pl_size));
-		memcpy(child_msg->pl, msg->pl, stripped_payload_size);
+		struct lp_msg *child_msg = msg_allocator_alloc(msg->pl_size);
+		memcpy(child_msg, msg, msg_bare_size(msg));
 		// Target is the target thread's tid
 		child_msg->dest = t_entry->tid;
-		child_msg->pl_size = child_pl_size;
 
-		struct t_pubsub_info *t_pi = t_pub_info_ptr(child_msg);
+		struct t_pubsub_info *t_pi = &child_msg->pubsub_info;
 		t_pi->lp_arr_p = &t_entry->lp_arr;
 		t_pi->m_cnt = 0;
 		t_pi->m_arr = NULL;
@@ -319,7 +289,6 @@ void sub_node_handle_published_message(struct lp_msg* msg)
 
 	assert(n_ch_count);
 
-	size_t child_pl_size = msg->pl_size + sizeof(struct t_pubsub_info);
 	// Visualization of child's payload once populated:
 	// Offsets	:	v-0       		v-msg->pl_size
 	// Contents	:	[ 	*(msg->pl) 	| 	lp_arr* |	childCount	| lp_msg**	]
@@ -331,14 +300,12 @@ void sub_node_handle_published_message(struct lp_msg* msg)
 
 		// Create child message
 		// Target holds the target thread's tid
-		struct lp_msg *child_msg = msg_allocator_alloc(child_pl_size);
-		memcpy(child_msg, msg, offsetof(struct lp_msg, pl_size));
-		memcpy(child_msg->pl, msg->pl, msg->pl_size);
+		struct lp_msg *child_msg = msg_allocator_alloc(msg->pl_size);
+		memcpy(child_msg, msg, msg_bare_size(msg));
 		// Target is the target thread's tid
 		child_msg->dest = t_entry->tid;
-		child_msg->pl_size = child_pl_size;
 
-		struct t_pubsub_info *pi = t_pub_info_ptr(child_msg);
+		struct t_pubsub_info *pi = &child_msg->pubsub_info;
 		pi->lp_arr_p = &t_entry->lp_arr;
 		pi->m_cnt = 0;
 		pi->m_arr = NULL;
@@ -409,7 +376,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 	 * [ pl	| &lp_arr	| 	0	| NULL		]
 	 */
 
-	struct t_pubsub_info *pi = t_pub_info_ptr(msg);
+	struct t_pubsub_info *pi = &msg->pubsub_info;
 	lp_entry_arr lp_arr = *pi->lp_arr_p;
 
 	assert(array_count(lp_arr));
@@ -420,9 +387,6 @@ void thread_handle_published_message(struct lp_msg* msg){
 	// Contents msg->pl now:
 	// Byte offsets	:v-0    v-og_pl_size	v-(pl_size+sizeof(void*))
 	// Contents	:[ pl	| &lp_arr	| childCount	| lp_msg**	]
-
-	// Here calculate the size of the payload for the messages LPs will receive
-	size_t original_pl_size = msg->pl_size - sizeof(struct t_pubsub_info);
 
 	// For each subscribed LP
 	for (array_count_t i = 0; i < array_count(lp_arr); i++) {
@@ -441,7 +405,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 					msg->dest_t,
 					msg->m_type,
 					msg->pl,
-					original_pl_size
+					msg->pl_size
 			);
 
 			child_msg->send = msg->send;
@@ -468,7 +432,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 				msg->dest_t,
 				msg->m_type,
 				msg->pl,
-				original_pl_size,
+				msg->pl_size,
 				usr_data
 			);
 
@@ -507,7 +471,7 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 	struct process_data *proc_p = &current_lp->p;
 
 	// A node-level pubsub message is created.
-	struct lp_msg *msg = msg_allocator_alloc(payload_size + sizeof(struct n_pubsub_info));
+	struct lp_msg *msg = msg_allocator_alloc(payload_size);
 	msg->dest = current_lp - lps;
 	msg->dest_t = timestamp;
 	msg->m_type = event_type;
@@ -590,7 +554,7 @@ void sub_node_handle_published_antimessage(struct lp_msg *msg)
 /// This carries out the antimessaging when the node is the one responsible for the publisher LP
 void pub_node_handle_published_antimessage(struct lp_msg *msg)
 {
-	struct n_pubsub_info *n_pi = n_pub_info_ptr(msg);
+	struct t_pubsub_info *n_pi = &msg->pubsub_info;
 
 	// Carry out the antimessaging
 	// the message originated from the local node. More precisely, it came from
@@ -608,6 +572,9 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 		do {
 			while (!bitmap_check(subs, dest_nid))
 				++dest_nid;
+
+			struct lp_msg *cmsg = children[it];
+			assert(cmsg->dest==cmsg->send);
 
 			mpi_remote_anti_msg_send(children[it], dest_nid);
 			++it;
@@ -660,8 +627,8 @@ static inline struct lp_msg* get_positive_pubsub_msg(const struct lp_msg *a_msg)
 void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 
 	// Is the publisher local to node
-	if (!(anti_msg->flags >> MSG_FLAGS_BITS)) {
-		if (anti_msg->flags & MSG_FLAG_PROCESSED){
+	if (!(anti_msg->raw_flags >> MSG_FLAGS_BITS)) {
+		if (anti_msg->raw_flags & MSG_FLAG_PROCESSED){
 			thread_actually_antimessage(anti_msg);
 		} else {
 			// Was still not processed
@@ -689,7 +656,7 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 /// Carries out antimessaging of thread-level pubsub message
 static void thread_actually_antimessage(struct lp_msg *msg)
 {
-	struct t_pubsub_info *pi = t_pub_info_ptr(msg);
+	struct t_pubsub_info *pi = &msg->pubsub_info;
 
 	for (size_t i = 0; i < pi->m_cnt; i++) {
 		struct lp_msg *cmsg = pi->m_arr[i];
@@ -849,7 +816,7 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 // the check on c_ptr will thus fail and behave exactly as pubsub_thread_msg_free
 void pubsub_msg_free(struct lp_msg* msg)
 {
-	struct n_pubsub_info *pi = n_pub_info_ptr(msg);
+	struct t_pubsub_info *pi = &msg->pubsub_info;
 
 	// If it has children
 	size_t children_ct = pi->m_cnt;
@@ -874,8 +841,7 @@ void pubsub_thread_msg_free(struct lp_msg* msg)
 	// No race conditions: either GVT>dest_t, or already antimsgd
 	msg->raw_flags &= ~MSG_FLAG_PUBSUB;
 
-	if(msg->pl_size)
-		mm_free(t_pub_info_ptr(msg)->m_arr);
+	mm_free(msg->pubsub_info.m_arr);
 
 	msg_allocator_free(msg);
 }

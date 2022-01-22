@@ -236,10 +236,10 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 	n_ch_count += current_lp->n_remote_sub_nodes;
 #endif
 
-	struct n_pubsub_info *pi = n_pub_info_ptr(msg);
+	struct n_pubsub_info *n_pi = n_pub_info_ptr(msg);
 
-	pi->m_cnt = n_ch_count;
-	pi->m_arr = mm_alloc(sizeof(*pi->m_arr) * n_ch_count);
+	n_pi->m_cnt = n_ch_count;
+	n_pi->m_arr = mm_alloc(sizeof(*n_pi->m_arr) * n_ch_count);
 
 	// Index of next index to fill in n_children_ptr(msg)
 	int it = 0;
@@ -258,9 +258,9 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 			struct lp_msg *mpi_msg = msg_allocator_alloc(
 					stripped_payload_size);
 			memcpy(mpi_msg, msg, stripped_msg_size);
-			msg->pl_size = stripped_payload_size;
+			mpi_msg->pl_size = stripped_payload_size;
 
-			n_pub_info_ptr(msg)->m_arr[it] = mpi_msg;
+			n_pi->m_arr[it] = mpi_msg;
 			++it;
 
 			mpi_remote_msg_send(mpi_msg, dest_nid);
@@ -287,10 +287,10 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 		child_msg->dest = t_entry->tid;
 		child_msg->pl_size = child_pl_size;
 
-		struct t_pubsub_info *pi = t_pub_info_ptr(child_msg);
-		pi->lp_arr_p = &t_entry->lp_arr;
-		pi->m_cnt = 0;
-		pi->m_arr = NULL;
+		struct t_pubsub_info *t_pi = t_pub_info_ptr(child_msg);
+		t_pi->lp_arr_p = &t_entry->lp_arr;
+		t_pi->m_cnt = 0;
+		t_pi->m_arr = NULL;
 
 		// *child_payload right now:
 		// Byte offsets	:	v-0       		v-user_pl_size
@@ -300,7 +300,7 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 		child_msg->raw_flags = MSG_FLAG_PUBSUB;
 
 		// Keep track of the child message for rollbacks!
-		n_pub_info_ptr(msg)->m_arr[it] = child_msg;
+		n_pi->m_arr[it] = child_msg;
 		// Push child message into target thread's incoming queue
 		pubsub_msg_queue_insert(child_msg);
 	}
@@ -443,8 +443,9 @@ void thread_handle_published_message(struct lp_msg* msg){
 					msg->pl,
 					original_pl_size
 			);
-#if LOG_LEVEL <= LOG_DEBUG
+
 			child_msg->send = msg->send;
+#if LOG_LEVEL <= LOG_DEBUG
 			child_msg->send_t = msg->send_t;
 #endif
 
@@ -510,8 +511,8 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 	msg->dest = current_lp - lps;
 	msg->dest_t = timestamp;
 	msg->m_type = event_type;
-#if LOG_LEVEL <= LOG_DEBUG
 	msg->send = current_lp - lps;
+#if LOG_LEVEL <= LOG_DEBUG
 	msg->send_t = proc_p->last_t;
 #endif
 
@@ -589,13 +590,13 @@ void sub_node_handle_published_antimessage(struct lp_msg *msg)
 /// This carries out the antimessaging when the node is the one responsible for the publisher LP
 void pub_node_handle_published_antimessage(struct lp_msg *msg)
 {
-	struct n_pubsub_info *pi = n_pub_info_ptr(msg);
+	struct n_pubsub_info *n_pi = n_pub_info_ptr(msg);
 
 	// Carry out the antimessaging
 	// the message originated from the local node. More precisely, it came from
 	// current_LP as this can only be called when rolling back
-	struct lp_msg **children = pi->m_arr;
-	int child_count = pi->m_cnt;
+	struct lp_msg **children = n_pi->m_arr;
+	int child_count = n_pi->m_cnt;
 	int it = 0;
 
 #ifdef ROOTSIM_MPI
@@ -752,15 +753,11 @@ extern void add_subbed_node(lp_id_t sub_id, lp_id_t pub_id);
 // Crashes if LP pub_id is not node-local. Data race if LP pub_id is not owned by local thread
 inline void add_subbed_node(lp_id_t sub_id, lp_id_t pub_id){
 	nid_t sub_node_id = lid_to_nid(sub_id);
-	assert(sub_id != pub_id);
+	assert(sub_node_id != nid);
 	if (!bitmap_check(lps[pub_id].subnodes, sub_node_id)) {
 		bitmap_set(lps[pub_id].subnodes, sub_node_id);
-
-		// Newly subbed node is remote
-		if (sub_node_id != nid) {
-			lps[pub_id].n_remote_sub_nodes++;
-			// Can also do this with bitmap_count_set after initialization
-		}
+		lps[pub_id].n_remote_sub_nodes++;
+		// Can also do this with bitmap_count_set after initialization
 	}
 }
 
@@ -769,11 +766,17 @@ inline void add_subbed_node(lp_id_t sub_id, lp_id_t pub_id){
 void SubscribeAndHandle(lp_id_t dirty_subscriber_id, lp_id_t publisher_id, void* data){
 	lp_id_t subscriber_id = dirty_subscriber_id & ~LP_ID_MSB; // Clear leftmost bit
 
-	bool sub_is_local = lid_to_nid(subscriber_id)==nid && lid_to_rid(subscriber_id)==rid;
+	bool sub_is_node_local = lid_to_nid(subscriber_id)==nid;
+	bool sub_is_thread_local = sub_is_node_local && lid_to_rid(subscriber_id)==rid;
 	bool pub_is_local = lid_to_nid(publisher_id)==nid && lid_to_rid(publisher_id)==rid;
 
-	if(pub_is_local && !sub_is_local){ // If the publisher is managed by local thread
+
+	if (pub_is_local && !sub_is_node_local) {
+		// If the publisher is managed by local thread and sub is remote
 		add_subbed_node(subscriber_id, publisher_id);
+	}
+
+	if(!sub_is_thread_local) {
 		return;
 	}
 

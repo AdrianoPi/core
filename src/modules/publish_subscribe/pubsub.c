@@ -32,21 +32,41 @@ spinlock_t *tableLocks;
 static __thread struct lp_msg *delivered_pubsub = NULL;
 
 /// Adds to past_pubsubs maintaining ordering
-static void pubsub_insert_in_past(struct lp_msg *msg)
-{
+void pubsub_insert_in_past(struct lp_msg *msg){
+
 	simtime_t time = msg->dest_t;
 
-	array_count_t i = array_count(past_pubsubs);
-	if (!i || time >= array_get_at(past_pubsubs, i - 1)->dest_t) {
+	int size = array_count(past_pubsubs);
+	if(!size) {
 		array_push(past_pubsubs, msg);
 		return;
 	}
 
-	do {
-		--i;
-	} while(i && time >= array_get_at(past_pubsubs, i - 1)->dest_t);
+	if(time >= array_peek(past_pubsubs)->dest_t){
+		array_push(past_pubsubs, msg);
+		return;
+	}
 
-	array_add_at(past_pubsubs, i, msg);
+	// Binary search the position
+	int min = 0;
+	int max = size-2;
+
+	int next;
+	simtime_t curr_t;
+	do {
+		next = (max+min)/2;
+		curr_t = array_get_at(past_pubsubs, next)->dest_t;
+		if (time < curr_t){
+			max = next-1;
+		} else if (time > curr_t) {
+			min = next+1;
+		} else { // Found an acceptable position
+			array_add_at(past_pubsubs, next, msg);
+			return;
+		}
+	} while( max >= min );
+
+	array_add_at(past_pubsubs, min, msg);
 }
 
 static void thread_actually_antimessage(struct lp_msg *msg);
@@ -213,11 +233,15 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 
 	n_pi->m_cnt = n_ch_count;
 	n_pi->m_arr = mm_alloc(sizeof(*n_pi->m_arr) * n_ch_count);
+#if LOG_LEVEL <= LOG_DEBUG
+	n_pi->lp_arr_p = (void *) (uintptr_t) 0xDEADBEEF;
+#endif
 
 	// Index of next index to fill in n_children_ptr(msg)
 	int it = 0;
 
 #ifdef ROOTSIM_MPI
+	assert((current_lp-lps)==msg->dest);
 	// Create and send messages to other nodes
 	int subbed_nodes = current_lp->n_remote_sub_nodes;
 	if (subbed_nodes) {
@@ -233,6 +257,7 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 			memcpy(mpi_msg, msg, msg_bare_size(msg));
 
 			assert(mpi_msg->dest==mpi_msg->send);
+			assert(mpi_msg->dest==msg->dest);
 
 			n_pi->m_arr[it] = mpi_msg;
 			++it;
@@ -280,6 +305,7 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 /// Called when MPI extracts a pubsub message
 void sub_node_handle_published_message(struct lp_msg* msg)
 {
+	assert(msg->pubsub_info.lp_arr_p==(void *) (uintptr_t) 0xDEADBEEF);
 	// On receiver nodes, the original message is only used to create thread-level ones
 
 	t_entry_arr threads = subscribersTable[msg->dest];
@@ -315,7 +341,10 @@ void sub_node_handle_published_message(struct lp_msg* msg)
 		// Contents	:		[ 	*(msg->pl) 	| 	lp_arr*	|	0	|	NULL	]
 		// The info for pubsub will be filled out by the thread handling the messages
 
-		child_msg->raw_flags = MSG_FLAG_PUBSUB;
+		child_msg->raw_flags += MSG_FLAG_PUBSUB;
+
+		assert(child_msg->raw_flags & MSG_FLAG_PUBSUB);
+		assert(child_msg->raw_flags >> MSG_FLAGS_BITS);
 
 		// Push child message into target thread's incoming queue
 		pubsub_msg_queue_insert(child_msg);
@@ -337,6 +366,8 @@ static inline bool check_early_anti_pubsub_messages(struct lp_msg *msg)
 	for (array_count_t i = 0; i < array_count(early_pubsub_antis); ++i) {
 		struct lp_msg *a_msg = array_get_at(early_pubsub_antis, i);
 		if (a_msg->raw_flags == m_id && a_msg->m_seq == m_seq) {
+			// The thread level was extracted and never processed.
+			msg->raw_flags-=MSG_FLAG_PUBSUB;
 			msg_allocator_free(msg);
 			msg_allocator_free(a_msg);
 			array_get_at(early_pubsub_antis, i) = array_peek(early_pubsub_antis);
@@ -556,6 +587,8 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 {
 	struct t_pubsub_info *n_pi = &msg->pubsub_info;
 
+	assert(n_pi->lp_arr_p==(void *) (uintptr_t) 0xDEADBEEF);
+
 	// Carry out the antimessaging
 	// the message originated from the local node. More precisely, it came from
 	// current_LP as this can only be called when rolling back
@@ -564,6 +597,8 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 	int it = 0;
 
 #ifdef ROOTSIM_MPI
+	assert((current_lp-lps)==msg->dest);
+
 	// Antimessage via MPI
 	int subbed_nodes = current_lp->n_remote_sub_nodes;
 	if (subbed_nodes) {
@@ -575,6 +610,7 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 
 			struct lp_msg *cmsg = children[it];
 			assert(cmsg->dest==cmsg->send);
+			assert(cmsg->dest==msg->dest);
 
 			mpi_remote_anti_msg_send(children[it], dest_nid);
 			++it;
@@ -598,7 +634,7 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 		}
 	}
 
-	msg_allocator_free(msg);
+	// FIXME: cleanup the message!! Freeing here does not work
 }
 
 /// Gets the positive message matching a_msg by removing it from past_pubsubs.
@@ -647,6 +683,7 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 	}
 
 	// We did
+	anti_msg->raw_flags -= MSG_FLAG_PUBSUB;
 	msg_allocator_free(anti_msg);
 
 	msg->raw_flags += MSG_FLAG_ANTI;
@@ -656,6 +693,8 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 /// Carries out antimessaging of thread-level pubsub message
 static void thread_actually_antimessage(struct lp_msg *msg)
 {
+	assert(msg->pubsub_info.lp_arr_p!=(void *) (uintptr_t) 0xDEADBEEF);
+
 	struct t_pubsub_info *pi = &msg->pubsub_info;
 
 	for (size_t i = 0; i < pi->m_cnt; i++) {
@@ -816,6 +855,8 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 // the check on c_ptr will thus fail and behave exactly as pubsub_thread_msg_free
 void pubsub_msg_free(struct lp_msg* msg)
 {
+	assert(msg->pubsub_info.lp_arr_p==(void *) (uintptr_t) 0xDEADBEEF);
+
 	struct t_pubsub_info *pi = &msg->pubsub_info;
 
 	// If it has children
@@ -875,7 +916,6 @@ void pubsub_on_gvt(simtime_t current_gvt)
 		pubsub_thread_msg_free(msg);
 	}
 	array_truncate_first(past_pubsubs, i);
-
 }
 
 #if LOG_LEVEL <= LOG_DEBUG

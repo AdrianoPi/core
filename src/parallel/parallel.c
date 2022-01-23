@@ -114,6 +114,7 @@ static thr_ret_t THREAD_CALL_CONV parallel_thread_run(void *rid_arg)
 #endif
 			stats_on_gvt(current_gvt);
 #if LOG_LEVEL <= LOG_DEBUG
+			assert(actual_gvt<=current_gvt);
 			actual_gvt = current_gvt;
 #endif
 		}

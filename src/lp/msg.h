@@ -21,10 +21,10 @@
 
 #define msg_is_before_serial(ma, mb) ((ma)->dest_t < (mb)->dest_t)
 
-#define msg_is_before(ma, mb) (\
-	msg_is_before_serial(ma, mb) || \
-	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags > (mb)->raw_flags)\
-)
+#define msg_is_before(ma, mb) (((ma)->dest_t < (mb)->dest_t || 		\
+	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags > (mb)->raw_flags) || \
+	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags == (mb)->raw_flags && (ma)->m_type > (mb)->m_type) || \
+	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags == (mb)->raw_flags && (ma)->m_type == (mb)->m_type && (ma)->send > (mb)->send)))
 
 #define msg_bare_size(msg) (offsetof(struct lp_msg, pl) + (msg)->pl_size)
 #define msg_anti_size() (offsetof(struct lp_msg, m_type) + sizeof(uint32_t))

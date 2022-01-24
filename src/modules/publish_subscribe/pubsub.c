@@ -233,9 +233,7 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 
 	n_pi->m_cnt = n_ch_count;
 	n_pi->m_arr = mm_alloc(sizeof(*n_pi->m_arr) * n_ch_count);
-#if LOG_LEVEL <= LOG_DEBUG
 	n_pi->lp_arr_p = (void *) (uintptr_t) 0xDEADBEEF;
-#endif
 
 	// Index of next index to fill in n_children_ptr(msg)
 	int it = 0;

@@ -233,13 +233,10 @@ static inline void send_anti_messages(struct process_data *proc_p,
 			-MSG_FLAG_PROCESSED, memory_order_relaxed);
 
 		if (!(f & MSG_FLAG_ANTI)) {
-// TODO: readd guards
-//#ifdef RETRACTABILITY
 			if(unlikely(is_retractable(msg))){
 				msg_allocator_free(msg);
 				continue;
 			}
-//#endif
 			msg_queue_insert(msg);
 			stats_take(STATS_MSG_ROLLBACK, 1);
 		}
@@ -367,8 +364,7 @@ void process_next_msg(void)
  */
 void process_msg(struct lp_msg *msg)
 {
-
-	assert(msg->dest_t >= actual_gvt);
+	//assert(msg->dest_t >= actual_gvt);
 	gvt_on_msg_extraction(msg->dest_t);
 
 #ifdef PUBSUB
@@ -426,7 +422,8 @@ void process_msg(struct lp_msg *msg)
 	if (unlikely(check_early_anti_messages(msg)))
 		return;
 
-	if (unlikely(proc_p->last_t > msg->dest_t)) {
+	if (unlikely(array_count(proc_p->p_msgs) &&
+			msg_is_before(msg, array_peek(proc_p->p_msgs)))) {
 		array_count_t past_i = match_straggler_msg(proc_p, msg);
 		do_rollback(proc_p, past_i);
 		termination_on_lp_rollback(msg->dest_t);

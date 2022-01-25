@@ -91,8 +91,8 @@ struct lp_msg_remote_match {
 enum msg_flag {
 	MSG_FLAG_ANTI 		= 1,
 	MSG_FLAG_PROCESSED	= 2,
-	MSG_FLAG_RETRACTABLE	= 4,
-	MSG_FLAG_PUBSUB		= 8
+	MSG_FLAG_PUBSUB		= 4,
+	MSG_FLAG_RETRACTABLE	= 8
 };
 
 #define MSG_FLAGS_BITS 4

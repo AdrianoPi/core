@@ -444,7 +444,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 
 			atomic_store_explicit(&child_msg->flags, 0U, memory_order_relaxed);
 
-			msg_queue_insert(child_msg);
+			process_msg(child_msg);
 
 		} else { // SubscribeAndHandle
 			// Set the current LP to the target lp's id
@@ -473,7 +473,15 @@ void thread_handle_published_message(struct lp_msg* msg){
 #if LOG_LEVEL <= LOG_DEBUG
 			child_msg->send_t = msg->send_t;
 #endif
-			msg_queue_insert(child_msg);
+
+			if (current_lp->lib_ctx_p->r_ts > 0 &&
+					msg_is_before(current_lp->r_msg, child_msg)){
+				// Cannot process. Push child message in queue
+				msg_queue_insert(child_msg);
+			} else {
+				// Updated: child message is now processed here
+				process_msg(child_msg);
+			}
 		}
 
 		// Keep track of the child message

@@ -259,8 +259,6 @@ void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 			return;
 		}
 
-		assert(!(msg->raw_flags & MSG_FLAG_ANTI));
-
 		// Only log pubsubs that have not been undone
 		if(is_pubsub_msg(msg)){
 			fprintf(pubsub_msgs_logfile, "%lu, %.15lf\n", msg->send, msg->send_t);
@@ -281,7 +279,6 @@ void pubsub_module_fini(){
 	array_fini(past_local_pubsubs);
 
 	for (array_count_t i = 0; i < array_count(past_remote_pubsubs); ++i) {
-		struct lp_msg* msg = array_get_at(past_remote_pubsubs, i);
 		// No check: remote pubsubs are NOT requeued upon antimessaging
 		pubsub_thread_msg_free(array_get_at(past_remote_pubsubs, i));
 	}
@@ -325,13 +322,14 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 
 	n_pi->m_cnt = n_ch_count;
 	n_pi->m_arr = mm_alloc(sizeof(*n_pi->m_arr) * n_ch_count);
+#if LOG_LEVEL <= LOG_DEBUG
 	n_pi->lp_arr_p = (void *) (uintptr_t) 0xDEADBEEF;
+#endif
 
 	// Index of next index to fill in n_children_ptr(msg)
 	int it = 0;
 
 #ifdef ROOTSIM_MPI
-	assert((current_lp-lps)==msg->dest);
 	// Create and send messages to other nodes
 	int subbed_nodes = current_lp->n_remote_sub_nodes;
 	if (subbed_nodes) {
@@ -345,9 +343,6 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 			struct lp_msg *mpi_msg = msg_allocator_alloc(
 					msg->pl_size);
 			memcpy(mpi_msg, msg, msg_bare_size(msg));
-
-			assert(mpi_msg->dest==mpi_msg->send);
-			assert(mpi_msg->dest==msg->dest);
 
 			n_pi->m_arr[it] = mpi_msg;
 			++it;
@@ -395,15 +390,12 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 /// Called when MPI extracts a pubsub message
 void sub_node_handle_published_message(struct lp_msg* msg)
 {
-	assert(msg->pubsub_info.lp_arr_p==(void *) (uintptr_t) 0xDEADBEEF);
 	// On receiver nodes, the original message is only used to create thread-level ones
 
 	t_entry_arr threads = subscribersTable[msg->dest];
 
 	// One message per thread
 	int n_ch_count = array_count(threads);
-
-	assert(n_ch_count);
 
 	// Visualization of child's payload once populated:
 	// Offsets	:	v-0       		v-msg->pl_size
@@ -432,9 +424,6 @@ void sub_node_handle_published_message(struct lp_msg* msg)
 		// The info for pubsub will be filled out by the thread handling the messages
 
 		child_msg->raw_flags += MSG_FLAG_PUBSUB;
-
-		assert(child_msg->raw_flags & MSG_FLAG_PUBSUB);
-		assert(child_msg->raw_flags >> MSG_FLAGS_BITS);
 
 		// Push child message into target thread's incoming queue
 		pubsub_msg_queue_insert(child_msg);
@@ -502,8 +491,6 @@ void thread_handle_published_message(struct lp_msg* msg){
 
 	struct t_pubsub_info *pi = &msg->pubsub_info;
 	lp_entry_arr lp_arr = *pi->lp_arr_p;
-
-	assert(array_count(lp_arr));
 
 	// One message per subscription
 	pi->m_cnt = array_count(lp_arr);
@@ -603,8 +590,6 @@ void PublishNewEvent(simtime_t timestamp, unsigned event_type, const void *paylo
 	if(silent_processing)
 		return;
 
-	assert(timestamp >= current_lp->p.last_t);
-
 	struct process_data *proc_p = &current_lp->p;
 
 	// A node-level pubsub message is created.
@@ -663,7 +648,6 @@ void sub_node_handle_published_antimessage(struct lp_msg *msg)
 
 	// One message per thread
 	int n_ch_count = array_count(threads);
-	assert(n_ch_count);
 
 	// For each subscribed Thread
 	for(int c = 0; c < n_ch_count; c++){
@@ -693,8 +677,6 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 {
 	struct t_pubsub_info *n_pi = &msg->pubsub_info;
 
-	assert(n_pi->lp_arr_p==(void *) (uintptr_t) 0xDEADBEEF);
-
 	// Carry out the antimessaging
 	// the message originated from the local node. More precisely, it came from
 	// current_LP as this can only be called when rolling back
@@ -703,8 +685,6 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 	int it = 0;
 
 #ifdef ROOTSIM_MPI
-	assert((current_lp-lps)==msg->dest);
-
 	// Antimessage via MPI
 	int subbed_nodes = current_lp->n_remote_sub_nodes;
 	if (subbed_nodes) {
@@ -713,10 +693,6 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 		do {
 			while (!bitmap_check(subs, dest_nid))
 				++dest_nid;
-
-			struct lp_msg *cmsg = children[it];
-			assert(cmsg->dest==cmsg->send);
-			assert(cmsg->dest==msg->dest);
 
 			mpi_remote_anti_msg_send(children[it], dest_nid);
 			++it;
@@ -795,8 +771,6 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 /// Carries out antimessaging of thread-level pubsub message
 static void thread_actually_antimessage(struct lp_msg *msg)
 {
-	assert(msg->pubsub_info.lp_arr_p!=(void *) (uintptr_t) 0xDEADBEEF);
-
 	struct t_pubsub_info *pi = &msg->pubsub_info;
 
 	for (size_t i = 0; i < pi->m_cnt; i++) {
@@ -862,7 +836,6 @@ extern void add_subbed_node(lp_id_t sub_id, lp_id_t pub_id);
 // Crashes if LP pub_id is not node-local. Data race if LP pub_id is not owned by local thread
 inline void add_subbed_node(lp_id_t sub_id, lp_id_t pub_id){
 	nid_t sub_node_id = lid_to_nid(sub_id);
-	assert(sub_node_id != nid);
 	if (!bitmap_check(lps[pub_id].subnodes, sub_node_id)) {
 		bitmap_set(lps[pub_id].subnodes, sub_node_id);
 		lps[pub_id].n_remote_sub_nodes++;
@@ -958,8 +931,6 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 // the check on c_ptr will thus fail and behave exactly as pubsub_thread_msg_free
 void pubsub_msg_free(struct lp_msg* msg)
 {
-	assert(msg->pubsub_info.lp_arr_p==(void *) (uintptr_t) 0xDEADBEEF);
-
 	struct t_pubsub_info *pi = &msg->pubsub_info;
 
 	// If it has children

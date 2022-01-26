@@ -38,8 +38,6 @@ void ScheduleNewEvent_pr(lp_id_t receiver, simtime_t timestamp,
 	if (unlikely(silent_processing))
 		return;
 
-	assert(timestamp >= current_lp->p.last_t);
-
 	struct process_data *proc_p = &current_lp->p;
 	struct lp_msg *msg = msg_allocator_pack(receiver, timestamp, event_type,
 		payload, payload_size);
@@ -364,7 +362,6 @@ void process_next_msg(void)
  */
 void process_msg(struct lp_msg *msg)
 {
-	//assert(msg->dest_t >= actual_gvt);
 	gvt_on_msg_extraction(msg->dest_t);
 
 #ifdef PUBSUB

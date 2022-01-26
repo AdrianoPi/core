@@ -98,8 +98,6 @@ void ScheduleRetractableEvent_pr(simtime_t timestamp, unsigned event_type)
 	if(silent_processing)
 		return;
 
-	assert(timestamp >= current_lp->p.last_t);
-
 	msg_queue_insert_retractable();
 }
 

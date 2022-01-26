@@ -8,6 +8,7 @@
 #define LP_ID_MSB (((lp_id_t) 1) << (sizeof(lp_id_t) * CHAR_BIT - 1))
 
 #define PUBSUB_PRINT_TOPOLOGY true
+#define PUBSUB_DUMP_MSGS true
 
 bool bitmap_check_bit(struct block_bitmap* bitmap, int bit){
 	return bitmap_check(bitmap, bit);
@@ -18,32 +19,32 @@ bool bitmap_check_bit(struct block_bitmap* bitmap, int bit){
 static __thread FILE *pubsub_msgs_logfile;
 #endif
 
-#define mark_as_thread_lv(msg_p) ((struct lp_msg *)(((uintptr_t)(msg_p)) | 1U))
-#define is_thread_lv(msg_p) (((uintptr_t)(msg_p)) & 1U)
 #define unmark_msg(msg_p) \
 	((struct lp_msg *)(((uintptr_t)(msg_p)) & (UINTPTR_MAX - 3)))
 
 // Holds thread-level pubsub messages
-__thread dyn_array(struct lp_msg *) past_pubsubs;
+__thread dyn_array(struct lp_msg *) past_remote_pubsubs;
+__thread dyn_array(struct lp_msg *) free_on_gvt_pubsubs;
+__thread dyn_array(struct lp_msg *) past_local_pubsubs; // For local thread-level pubsubs to be freed on GVT
 __thread dyn_array(struct lp_msg *) early_pubsub_antis;
 
 t_entry_arr *subscribersTable;
 spinlock_t *tableLocks;
 static __thread struct lp_msg *delivered_pubsub = NULL;
 
-/// Adds to past_pubsubs maintaining ordering
+/// Adds to past_local_pubsubs maintaining ordering
 void pubsub_insert_in_past(struct lp_msg *msg){
 
 	simtime_t time = msg->dest_t;
 
-	int size = array_count(past_pubsubs);
+	int size = array_count(past_local_pubsubs);
 	if(!size) {
-		array_push(past_pubsubs, msg);
+		array_push(past_local_pubsubs, msg);
 		return;
 	}
 
-	if(time >= array_peek(past_pubsubs)->dest_t){
-		array_push(past_pubsubs, msg);
+	if(time >= array_peek(past_local_pubsubs)->dest_t){
+		array_push(past_local_pubsubs, msg);
 		return;
 	}
 
@@ -55,18 +56,94 @@ void pubsub_insert_in_past(struct lp_msg *msg){
 	simtime_t curr_t;
 	do {
 		next = (max+min)/2;
-		curr_t = array_get_at(past_pubsubs, next)->dest_t;
+		curr_t = array_get_at(past_local_pubsubs, next)->dest_t;
 		if (time < curr_t){
 			max = next-1;
 		} else if (time > curr_t) {
 			min = next+1;
 		} else { // Found an acceptable position
-			array_add_at(past_pubsubs, next, msg);
+			array_add_at(past_local_pubsubs, next, msg);
 			return;
 		}
 	} while( max >= min );
 
-	array_add_at(past_pubsubs, min, msg);
+	array_add_at(past_local_pubsubs, min, msg);
+}
+
+/// Adds to past_remote_pubsubs maintaining ordering
+void pubsub_insert_in_remote_past(struct lp_msg *msg){
+
+	simtime_t time = msg->dest_t;
+
+	int size = array_count(past_remote_pubsubs);
+	if(!size) {
+		array_push(past_remote_pubsubs, msg);
+		return;
+	}
+
+	if(time >= array_peek(past_remote_pubsubs)->dest_t){
+		array_push(past_remote_pubsubs, msg);
+		return;
+	}
+
+	// Binary search the position
+	int min = 0;
+	int max = size-2;
+
+	int next;
+	simtime_t curr_t;
+	do {
+		next = (max+min)/2;
+		curr_t = array_get_at(past_remote_pubsubs, next)->dest_t;
+		if (time < curr_t){
+			max = next-1;
+		} else if (time > curr_t) {
+			min = next+1;
+		} else { // Found an acceptable position
+			array_add_at(past_remote_pubsubs, next, msg);
+			return;
+		}
+	} while( max >= min );
+
+	array_add_at(past_remote_pubsubs, min, msg);
+}
+
+/// Adds to past_remote_pubsubs maintaining ordering
+void pubsub_free_on_gvt(struct lp_msg *msg){
+
+	simtime_t time = msg->dest_t;
+
+	int size = array_count(free_on_gvt_pubsubs);
+	if(!size) {
+		array_push(free_on_gvt_pubsubs, msg);
+		return;
+	}
+
+	if(time >= array_peek(free_on_gvt_pubsubs)->dest_t){
+		array_push(free_on_gvt_pubsubs, msg);
+		return;
+	}
+
+	// Binary search the position
+	int min = 0;
+	int max = size-2;
+
+	int next;
+	simtime_t curr_t;
+	do {
+		next = (max+min)/2;
+		curr_t = array_get_at(free_on_gvt_pubsubs, next)->dest_t;
+		if (time < curr_t){
+			max = next-1;
+		} else if (time > curr_t) {
+			min = next+1;
+		} else { // Found an acceptable position
+			array_add_at(free_on_gvt_pubsubs, next, msg);
+			return;
+		}
+	} while( max >= min );
+
+	array_add_at(free_on_gvt_pubsubs, min, msg);
 }
 
 static void thread_actually_antimessage(struct lp_msg *msg);
@@ -157,7 +234,9 @@ void pubsub_module_global_fini(){
 }
 
 void pubsub_module_init(){
-	array_init(past_pubsubs);
+	array_init(past_remote_pubsubs);
+	array_init(past_local_pubsubs);
+	array_init(free_on_gvt_pubsubs);
 	array_init(early_pubsub_antis);
 #if LOG_LEVEL <= LOG_DEBUG
 	// Open logging file
@@ -172,6 +251,7 @@ void pubsub_module_init(){
 
 #if LOG_LEVEL <= LOG_DEBUG
 void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
+	if (!PUBSUB_DUMP_MSGS) return;
 	// Since dyn_arrays are unnamed structs, we work with the items element
 	for(array_count_t i = 0; i < size; i++){
 		struct lp_msg* msg = unmark_msg(msg_array[i]);
@@ -183,22 +263,34 @@ void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 
 		// Only log pubsubs that have not been undone
 		if(is_pubsub_msg(msg)){
-			fprintf(pubsub_msgs_logfile, "%lu, %lf\n", msg->send, msg->send_t);
+			fprintf(pubsub_msgs_logfile, "%lu, %.15lf\n", msg->send, msg->send_t);
 		}
 	}
 }
 #endif
 
 void pubsub_module_fini(){
-	for (array_count_t i = 0; i < array_count(past_pubsubs); ++i) {
-		struct lp_msg* msg = array_get_at(past_pubsubs, i);
+	for (array_count_t i = 0; i < array_count(past_local_pubsubs); ++i) {
+		struct lp_msg* msg = array_get_at(past_local_pubsubs, i);
 		if ((msg->raw_flags & MSG_FLAG_ANTI) && (msg->raw_flags & MSG_FLAG_PROCESSED)){
 			// Is in msg_queue and will be freed there.
 			continue;
 		}
-		pubsub_thread_msg_free(array_get_at(past_pubsubs, i));
+		pubsub_thread_msg_free(array_get_at(past_local_pubsubs, i));
 	}
-	array_fini(past_pubsubs);
+	array_fini(past_local_pubsubs);
+
+	for (array_count_t i = 0; i < array_count(past_remote_pubsubs); ++i) {
+		struct lp_msg* msg = array_get_at(past_remote_pubsubs, i);
+		// No check: remote pubsubs are NOT requeued upon antimessaging
+		pubsub_thread_msg_free(array_get_at(past_remote_pubsubs, i));
+	}
+	array_fini(past_remote_pubsubs);
+
+	for (array_count_t i = 0; i < array_count(free_on_gvt_pubsubs); ++i) {
+		pubsub_msg_free(array_get_at(free_on_gvt_pubsubs, i));
+	}
+	array_fini(free_on_gvt_pubsubs);
 
 	for (array_count_t i = 0; i < array_count(early_pubsub_antis); ++i) {
 		msg_allocator_free(array_get_at(early_pubsub_antis, i));
@@ -367,6 +459,9 @@ static inline bool check_early_anti_pubsub_messages(struct lp_msg *msg)
 			// The thread level was extracted and never processed.
 			msg->raw_flags-=MSG_FLAG_PUBSUB;
 			msg_allocator_free(msg);
+			// TODO: use lp_msg_remote_match for early_antis.
+			// Shift or it could appear to have some flags set.
+			a_msg->raw_flags<<=MSG_FLAGS_BITS;
 			msg_allocator_free(a_msg);
 			array_get_at(early_pubsub_antis, i) = array_peek(early_pubsub_antis);
 			--array_count(early_pubsub_antis);
@@ -488,7 +583,12 @@ void thread_handle_published_message(struct lp_msg* msg){
 		pi->m_arr[i] = child_msg;
 
 	}
-	pubsub_insert_in_past(msg);
+#ifdef ROOTSIM_MPI
+	if(msg->raw_flags >> MSG_FLAGS_BITS)
+		pubsub_insert_in_remote_past(msg);
+	else
+#endif
+		pubsub_insert_in_past(msg);
 }
 
 // ok
@@ -640,23 +740,19 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 		}
 	}
 
-	// FIXME: cleanup the message!! Freeing here does not work
+	pubsub_free_on_gvt(msg);
 }
 
-/// Gets the positive message matching a_msg by removing it from past_pubsubs.
+/// Gets the positive message matching a_msg from past_remote_pubsubs.
 static inline struct lp_msg* get_positive_pubsub_msg(const struct lp_msg *a_msg)
 {
 	uint32_t m_id = a_msg->raw_flags >> MSG_FLAGS_BITS, m_seq = a_msg->m_seq;
 	array_count_t past_i = 0;
-	array_count_t ct = array_count(past_pubsubs);
+	array_count_t ct = array_count(past_remote_pubsubs);
 	while (past_i<ct) {
-		struct lp_msg *msg = unmark_msg(array_get_at(past_pubsubs, past_i));
+		struct lp_msg *msg = array_get_at(past_remote_pubsubs, past_i);
 		if ((msg->raw_flags >> MSG_FLAGS_BITS) == m_id && msg->m_seq == m_seq) {
 			atomic_fetch_add_explicit(&msg->flags, MSG_FLAG_ANTI, memory_order_relaxed);
-
-			// TODO: is it better to free while antimessaging
-			//  or letting the fossil collector free it later?
-			// Prevents double free
 			return msg;
 		}
 		past_i++;
@@ -712,10 +808,11 @@ static void thread_actually_antimessage(struct lp_msg *msg)
 		if (cflags & MSG_FLAG_PROCESSED)
 			msg_queue_insert(cmsg);
 	}
-	// FIXME: aggiorna il resto per essere coerente con questo:
-	// Tolgo flag processed. Se da past_pubsubs un messaggio non ha il flag processed lo posso freeare
-	// Se ha processed e anti, allora sta ancora in msg_queue
-	// La cosa si presenta solo in cleanup.
+	// Reset PROCESSED flag!
+	// During cleanup, if a message in past_local_pubsubs has both processed
+	// and anti flags set, then it is in msg_queue and will be freed in
+	// msg_queue_fini.
+	// We cannot free such message before, or we'll read after free.
 	msg->raw_flags -= MSG_FLAG_PROCESSED;
 }
 
@@ -893,6 +990,20 @@ void pubsub_thread_msg_free(struct lp_msg* msg)
 	msg_allocator_free(msg);
 }
 
+// Pubsub free to be used by msg_queue_fini.
+void pubsub_thread_msg_free_in_fini(struct lp_msg* msg)
+{
+	msg->raw_flags &= ~MSG_FLAG_PUBSUB;
+	// Since we reuse messages, a remote antimessage could point to freed
+	// memory via its m_arr pointer if the message was a pubsub in its
+	// previous life, or hold a garbage address if it was never written.
+	if (!(msg->raw_flags >> MSG_FLAGS_BITS && msg->raw_flags & MSG_FLAG_ANTI)) {
+		mm_free(msg->pubsub_info.m_arr);
+	}
+
+	msg_allocator_free(msg);
+}
+
 // OK
 // Insert a thread-level pubsub message in queue
 void pubsub_msg_queue_insert(struct lp_msg* msg){
@@ -910,18 +1021,42 @@ void pubsub_msg_queue_insert(struct lp_msg* msg){
 
 void pubsub_on_gvt(simtime_t current_gvt)
 {
-	// Garbage collect past_pubsubs
-	array_count_t ct = array_count(past_pubsubs);
+	array_count_t ct;
 	array_count_t i;
 
-	for(i = 0; i < ct; ++i){
-		struct lp_msg *msg = array_get_at(past_pubsubs, i);
+	// Fossil collect past_local_pubsubs
+	ct = array_count(past_local_pubsubs);
+	for(i = 0; i < ct; ++i) {
+		struct lp_msg *msg = array_get_at(past_local_pubsubs, i);
 		if (msg->dest_t >= current_gvt)
 			break;
 
 		pubsub_thread_msg_free(msg);
 	}
-	array_truncate_first(past_pubsubs, i);
+	array_truncate_first(past_local_pubsubs, i);
+
+	// Fossil collect past_remote_pubsubs
+	ct = array_count(past_remote_pubsubs);
+	for(i = 0; i < ct; ++i) {
+		struct lp_msg *msg = array_get_at(past_remote_pubsubs, i);
+		if (msg->dest_t >= current_gvt)
+			break;
+
+		pubsub_thread_msg_free(msg);
+	}
+	array_truncate_first(past_remote_pubsubs, i);
+
+	// Fossil collect free_on_gvt_pubsubs
+	ct = array_count(free_on_gvt_pubsubs);
+	for(i = 0; i < ct; ++i) {
+		struct lp_msg *msg = array_get_at(free_on_gvt_pubsubs, i);
+		if (msg->dest_t >= current_gvt)
+			break;
+
+		pubsub_msg_free(msg);
+	}
+	array_truncate_first(free_on_gvt_pubsubs, i);
+
 }
 
 #if LOG_LEVEL <= LOG_DEBUG

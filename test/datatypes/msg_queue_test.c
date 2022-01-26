@@ -23,6 +23,7 @@
 #define THREAD_REPS 100000
 
 #define pubsub_thread_msg_free msg_allocator_free
+#define pubsub_thread_msg_free_in_fini msg_allocator_free
 
 uint64_t n_lps_node = 64;
 static __thread test_rng_state rng_state;

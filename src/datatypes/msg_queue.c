@@ -88,7 +88,7 @@ void msg_queue_fini(void)
 		struct lp_msg* msg = heap_items(mqp.q)[i].m;
 #ifdef PUBSUB
 		if(is_pubsub_msg(msg))
-			pubsub_thread_msg_free(msg);
+			pubsub_thread_msg_free_in_fini(msg);
 		else
 #endif
 			msg_allocator_free(msg);
@@ -102,7 +102,7 @@ void msg_queue_fini(void)
 		struct lp_msg* msg = array_get_at(mq->b, i).m;
 #ifdef PUBSUB
 		if(is_pubsub_msg(msg))
-			pubsub_thread_msg_free(msg);
+			pubsub_thread_msg_free_in_fini(msg);
 		else
 #endif
 			msg_allocator_free(msg);

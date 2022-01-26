@@ -49,6 +49,7 @@ extern void thread_handle_published_antimessage(struct lp_msg* anti_msg);
 
 extern void pubsub_msg_free(struct lp_msg* msg);
 extern void pubsub_thread_msg_free(struct lp_msg* msg);
+extern void pubsub_thread_msg_free_in_fini(struct lp_msg* msg);
 extern void pubsub_msg_queue_insert(struct lp_msg* msg);
 
 #define is_pubsub_msg(msg)						\

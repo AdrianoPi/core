@@ -343,11 +343,12 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 			struct lp_msg *mpi_msg = msg_allocator_alloc(
 					msg->pl_size);
 			memcpy(mpi_msg, msg, msg_bare_size(msg));
-
 			n_pi->m_arr[it] = mpi_msg;
-			++it;
 
 			mpi_remote_msg_send(mpi_msg, dest_nid);
+			
+			++it;
+			++dest_nid;
 		} while (it < subbed_nodes);
 	}
 
@@ -696,6 +697,7 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 
 			mpi_remote_anti_msg_send(children[it], dest_nid);
 			++it;
+			++dest_nid;
 		} while (it < subbed_nodes);
 	}
 #endif

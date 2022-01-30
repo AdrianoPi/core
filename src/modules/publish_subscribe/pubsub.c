@@ -34,40 +34,8 @@ static __thread struct lp_msg *delivered_pubsub = NULL;
 
 /// Adds to past_local_pubsubs maintaining ordering
 void pubsub_insert_in_past(struct lp_msg *msg){
-
-	simtime_t time = msg->dest_t;
-
-	int size = array_count(past_local_pubsubs);
-	if(!size) {
-		array_push(past_local_pubsubs, msg);
-		return;
-	}
-
-	if(time >= array_peek(past_local_pubsubs)->dest_t){
-		array_push(past_local_pubsubs, msg);
-		return;
-	}
-
-	// Binary search the position
-	int min = 0;
-	int max = size-2;
-
-	int next;
-	simtime_t curr_t;
-	do {
-		next = (max+min)/2;
-		curr_t = array_get_at(past_local_pubsubs, next)->dest_t;
-		if (time < curr_t){
-			max = next-1;
-		} else if (time > curr_t) {
-			min = next+1;
-		} else { // Found an acceptable position
-			array_add_at(past_local_pubsubs, next, msg);
-			return;
-		}
-	} while( max >= min );
-
-	array_add_at(past_local_pubsubs, min, msg);
+	array_push(past_local_pubsubs, msg);
+	return;
 }
 
 /// Adds to past_remote_pubsubs maintaining ordering
@@ -110,40 +78,8 @@ void pubsub_insert_in_remote_past(struct lp_msg *msg){
 
 /// Adds to past_remote_pubsubs maintaining ordering
 void pubsub_free_on_gvt(struct lp_msg *msg){
-
-	simtime_t time = msg->dest_t;
-
-	int size = array_count(free_on_gvt_pubsubs);
-	if(!size) {
-		array_push(free_on_gvt_pubsubs, msg);
-		return;
-	}
-
-	if(time >= array_peek(free_on_gvt_pubsubs)->dest_t){
-		array_push(free_on_gvt_pubsubs, msg);
-		return;
-	}
-
-	// Binary search the position
-	int min = 0;
-	int max = size-2;
-
-	int next;
-	simtime_t curr_t;
-	do {
-		next = (max+min)/2;
-		curr_t = array_get_at(free_on_gvt_pubsubs, next)->dest_t;
-		if (time < curr_t){
-			max = next-1;
-		} else if (time > curr_t) {
-			min = next+1;
-		} else { // Found an acceptable position
-			array_add_at(free_on_gvt_pubsubs, next, msg);
-			return;
-		}
-	} while( max >= min );
-
-	array_add_at(free_on_gvt_pubsubs, min, msg);
+	array_push(free_on_gvt_pubsubs, msg);
+	return;
 }
 
 static void thread_actually_antimessage(struct lp_msg *msg);
@@ -994,22 +930,27 @@ void pubsub_msg_queue_insert(struct lp_msg* msg){
 
 void pubsub_on_gvt(simtime_t current_gvt)
 {
-	array_count_t ct;
-	array_count_t i;
-
 	// Fossil collect past_local_pubsubs
-	ct = array_count(past_local_pubsubs);
-	for(i = 0; i < ct; ++i) {
+	for(array_count_t i = array_count(past_local_pubsubs); i--;) {
 		struct lp_msg *msg = array_get_at(past_local_pubsubs, i);
-		if (msg->dest_t >= current_gvt)
-			break;
-
+		if(msg->dest_t >= current_gvt)
+			continue;
 		pubsub_thread_msg_free(msg);
+		array_get_at(past_local_pubsubs, i) = array_pop(past_local_pubsubs);
 	}
-	array_truncate_first(past_local_pubsubs, i);
 
+	// Fossil collect free_on_gvt_pubsubs
+	for(array_count_t i = array_count(free_on_gvt_pubsubs); i--;){
+		struct lp_msg *msg = array_get_at(free_on_gvt_pubsubs, i);
+		if(msg->dest_t >= current_gvt)
+			continue;
+		pubsub_msg_free(msg);
+		array_get_at(free_on_gvt_pubsubs, i) = array_pop(free_on_gvt_pubsubs);
+	}
+
+	array_count_t i;
 	// Fossil collect past_remote_pubsubs
-	ct = array_count(past_remote_pubsubs);
+	array_count_t ct = array_count(past_remote_pubsubs);
 	for(i = 0; i < ct; ++i) {
 		struct lp_msg *msg = array_get_at(past_remote_pubsubs, i);
 		if (msg->dest_t >= current_gvt)
@@ -1018,18 +959,6 @@ void pubsub_on_gvt(simtime_t current_gvt)
 		pubsub_thread_msg_free(msg);
 	}
 	array_truncate_first(past_remote_pubsubs, i);
-
-	// Fossil collect free_on_gvt_pubsubs
-	ct = array_count(free_on_gvt_pubsubs);
-	for(i = 0; i < ct; ++i) {
-		struct lp_msg *msg = array_get_at(free_on_gvt_pubsubs, i);
-		if (msg->dest_t >= current_gvt)
-			break;
-
-		pubsub_msg_free(msg);
-	}
-	array_truncate_first(free_on_gvt_pubsubs, i);
-
 }
 
 #if LOG_LEVEL <= LOG_DEBUG

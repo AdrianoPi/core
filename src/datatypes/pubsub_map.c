@@ -16,7 +16,7 @@
 #include <stdio.h>
 
 // must be a power of two
-#define MAP_INITIAL_CAPACITY 8
+#define MAP_INITIAL_CAPACITY 16
 #define DIB(curr_i, hash, capacity_mo) 	(((curr_i) - (hash)) & (capacity_mo))
 #define SWAP_VALUES(a, b) 						\
 	do {								\
@@ -58,7 +58,6 @@ void pubsub_map_fini(struct pubsub_map *m)
 			++i;
 
 		if(rmv[i].msg->raw_flags & MSG_FLAG_ANTI) {
-			rmv[i].msg->raw_flags &= ~(uint32_t) MSG_FLAG_PUBSUB;
 			msg_allocator_free(rmv[i].msg);
 		} else {
 			pubsub_thread_msg_free(rmv[i].msg);
@@ -136,12 +135,16 @@ struct lp_msg *pubsub_map_add(struct pubsub_map *m, struct lp_msg *msg)
 	};
 
 	struct lp_msg *ret = pubsub_map_insert_hashed(m, ins);
-	pubsub_map_expand(m);
+	if (ret == NULL) {
+		++m->count;
+		pubsub_map_expand(m);
+	}
 	return ret;
 }
 
 void pubsub_map_fossil_collect(struct pubsub_map *m, simtime_t gvt)
 {
+	return;
 	struct pubsub_map_node *rmv = m->n;
 	m->n = mm_alloc(sizeof(*m->n) * (m->capacity_mo + 1));
 	memset(m->n, 0, sizeof(*m->n) * (m->capacity_mo + 1));
@@ -149,14 +152,14 @@ void pubsub_map_fossil_collect(struct pubsub_map *m, simtime_t gvt)
 	for (array_count_t i = 0, j = 0; j < m->count; ++i, ++j) {
 		while (rmv[i].msg == NULL)
 			++i;
-		if (rmv[i].msg->dest_t < gvt)
+		if (rmv[i].msg->dest_t < gvt) {
 			if(rmv[i].msg->raw_flags & MSG_FLAG_ANTI) {
-				rmv[i].msg->raw_flags &= ~(uint32_t) MSG_FLAG_PUBSUB;
 				msg_allocator_free(rmv[i].msg);
 			} else {
 				pubsub_thread_msg_free(rmv[i].msg);
 			}
-		else
+			--m->count;
+		} else
 			pubsub_map_insert_hashed(m, rmv[i]);
 	}
 	mm_free(rmv);

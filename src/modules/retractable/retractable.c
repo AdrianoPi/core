@@ -25,7 +25,7 @@ void retractable_module_lp_fini()
 	struct lp_msg *msg = current_lp->r_msg;
 	// If there is a message and it is not scheduled
 	// (otherwise it gets freed by msg_queue_fini)
-	if(msg && msg->dest_t < 0)
+	if(msg)
 		msg_allocator_free(current_lp->r_msg);
 }
 

@@ -48,8 +48,13 @@ void fossil_lp_on_gvt(struct lp_ctx *lp, simtime_t current_gvt)
 	array_count_t k = past_i;
 	while (k--) {
 		struct lp_msg *msg = array_get_at(proc_p->p_msgs, k);
-		if (!is_msg_local_sent(msg))
-			msg_allocator_free(unmark_msg(msg));
+		if (!is_msg_local_sent(msg)) {
+			msg=unmark_msg(msg);
+			if (msg->raw_flags & MSG_FLAG_PUBSUB)
+				pubsub_msg_free(msg);
+			else
+				msg_allocator_free(msg);
+		}
 	}
 	array_truncate_first(proc_p->p_msgs, past_i);
 }

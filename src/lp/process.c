@@ -157,8 +157,12 @@ void process_lp_fini(void)
 		msg = unmark_msg(msg);
 		uint32_t flags = atomic_load_explicit(&msg->flags,
 				memory_order_relaxed);
-		if (!(flags & MSG_FLAG_ANTI))
-			msg_allocator_free(msg);
+		if (!(flags & MSG_FLAG_ANTI)) {
+			if (flags & MSG_FLAG_PUBSUB)
+				pubsub_msg_free(msg);
+			else
+				msg_allocator_free(msg);
+		}
 	}
 	array_fini(proc_p->p_msgs);
 }

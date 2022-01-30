@@ -9,6 +9,7 @@
 #include <datatypes/pubsub_map.h>
 
 #include <mm/msg_allocator.h>
+#include <modules/publish_subscribe/pubsub.h>
 
 #include <memory.h>
 #include <stdint.h>
@@ -30,7 +31,7 @@
 static inline pubsub_map_hash_nt get_hash(const struct lp_msg *msg)
 {
 	uint64_t z = 0x9e3779b97f4a7c15 +
-			(((uint64_t)msg->m_seq) << 32) + msg->raw_flags;
+			(((uint64_t)msg->m_seq) << 32) + (msg->raw_flags >> MSG_FLAGS_BITS);
 	z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
 	z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
 	return (pubsub_map_hash_nt)((z ^ (z >> 31)) >> 32);
@@ -50,7 +51,21 @@ void pubsub_map_init(struct pubsub_map *m)
 
 void pubsub_map_fini(struct pubsub_map *m)
 {
-	free(m->n);
+	struct pubsub_map_node *rmv = m->n;
+
+	for (array_count_t i = 0, j = 0; j < m->count; ++i, ++j) {
+		while (rmv[i].msg == NULL)
+			++i;
+
+		if(rmv[i].msg->raw_flags & MSG_FLAG_ANTI) {
+			rmv[i].msg->raw_flags &= ~(uint32_t) MSG_FLAG_PUBSUB;
+			msg_allocator_free(rmv[i].msg);
+		} else {
+			pubsub_thread_msg_free(rmv[i].msg);
+		}
+	}
+
+	mm_free(m->n);
 }
 
 array_count_t pubsub_map_count(const struct pubsub_map *n)
@@ -76,7 +91,7 @@ static struct lp_msg *pubsub_map_insert_hashed(struct pubsub_map *m,
 		}
 
 		if (nodes[i].hash == ins.hash &&
-				nodes[i].msg->raw_flags == ins.msg->raw_flags &&
+				(nodes[i].msg->raw_flags >> MSG_FLAGS_BITS) == (ins.msg->raw_flags >> MSG_FLAGS_BITS) &&
 				nodes[i].msg->m_seq == ins.msg->m_seq)
 			return nodes[i].msg;
 
@@ -125,7 +140,7 @@ struct lp_msg *pubsub_map_add(struct pubsub_map *m, struct lp_msg *msg)
 	return ret;
 }
 
-void pubsub_map_fossil(struct pubsub_map *m, simtime_t gvt)
+void pubsub_map_fossil_collect(struct pubsub_map *m, simtime_t gvt)
 {
 	struct pubsub_map_node *rmv = m->n;
 	m->n = mm_alloc(sizeof(*m->n) * (m->capacity_mo + 1));
@@ -135,7 +150,12 @@ void pubsub_map_fossil(struct pubsub_map *m, simtime_t gvt)
 		while (rmv[i].msg == NULL)
 			++i;
 		if (rmv[i].msg->dest_t < gvt)
-			msg_allocator_free(rmv[i].msg);
+			if(rmv[i].msg->raw_flags & MSG_FLAG_ANTI) {
+				rmv[i].msg->raw_flags &= ~(uint32_t) MSG_FLAG_PUBSUB;
+				msg_allocator_free(rmv[i].msg);
+			} else {
+				pubsub_thread_msg_free(rmv[i].msg);
+			}
 		else
 			pubsub_map_insert_hashed(m, rmv[i]);
 	}

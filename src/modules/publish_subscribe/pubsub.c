@@ -4,6 +4,7 @@
 
 #include <limits.h>		// for CHAR_BIT
 #include <lp/process.h>
+#include <datatypes/pubsub_map.h>
 
 #define LP_ID_MSB (((lp_id_t) 1) << (sizeof(lp_id_t) * CHAR_BIT - 1))
 
@@ -22,65 +23,16 @@ static __thread FILE *pubsub_msgs_logfile;
 #define unmark_msg(msg_p) \
 	((struct lp_msg *)(((uintptr_t)(msg_p)) & (UINTPTR_MAX - 3)))
 
+// FIXME: when we free node level pubsubs during cleanup we currently
+//  free thread-level children that are also in msg_queue (processed + antimsg)
+
 // Holds thread-level pubsub messages
-__thread dyn_array(struct lp_msg *) past_remote_pubsubs;
+__thread struct pubsub_map remote_pubsubs_map;
 __thread dyn_array(struct lp_msg *) free_on_gvt_pubsubs;
-__thread dyn_array(struct lp_msg *) past_local_pubsubs; // For local thread-level pubsubs to be freed on GVT
-__thread dyn_array(struct lp_msg *) early_pubsub_antis;
 
 t_entry_arr *subscribersTable;
 spinlock_t *tableLocks;
 static __thread struct lp_msg *delivered_pubsub = NULL;
-
-/// Adds to past_local_pubsubs maintaining ordering
-void pubsub_insert_in_past(struct lp_msg *msg){
-	array_push(past_local_pubsubs, msg);
-	return;
-}
-
-/// Adds to past_remote_pubsubs maintaining ordering
-void pubsub_insert_in_remote_past(struct lp_msg *msg){
-
-	simtime_t time = msg->dest_t;
-
-	int size = array_count(past_remote_pubsubs);
-	if(!size) {
-		array_push(past_remote_pubsubs, msg);
-		return;
-	}
-
-	if(time >= array_peek(past_remote_pubsubs)->dest_t){
-		array_push(past_remote_pubsubs, msg);
-		return;
-	}
-
-	// Binary search the position
-	int min = 0;
-	int max = size-2;
-
-	int next;
-	simtime_t curr_t;
-	do {
-		next = (max+min)/2;
-		curr_t = array_get_at(past_remote_pubsubs, next)->dest_t;
-		if (time < curr_t){
-			max = next-1;
-		} else if (time > curr_t) {
-			min = next+1;
-		} else { // Found an acceptable position
-			array_add_at(past_remote_pubsubs, next, msg);
-			return;
-		}
-	} while( max >= min );
-
-	array_add_at(past_remote_pubsubs, min, msg);
-}
-
-/// Adds to past_remote_pubsubs maintaining ordering
-void pubsub_free_on_gvt(struct lp_msg *msg){
-	array_push(free_on_gvt_pubsubs, msg);
-	return;
-}
 
 static void thread_actually_antimessage(struct lp_msg *msg);
 extern void pubsub_thread_msg_free(struct lp_msg* msg);
@@ -170,10 +122,8 @@ void pubsub_module_global_fini(){
 }
 
 void pubsub_module_init(){
-	array_init(past_remote_pubsubs);
-	array_init(past_local_pubsubs);
+	pubsub_map_init(&remote_pubsubs_map);
 	array_init(free_on_gvt_pubsubs);
-	array_init(early_pubsub_antis);
 #if LOG_LEVEL <= LOG_DEBUG
 	// Open logging file
 	char* fname = malloc(strlen("pubsub_msgs_n_t.log") + 100);
@@ -204,31 +154,14 @@ void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 #endif
 
 void pubsub_module_fini(){
-	for (array_count_t i = 0; i < array_count(past_local_pubsubs); ++i) {
-		struct lp_msg* msg = array_get_at(past_local_pubsubs, i);
-		if ((msg->raw_flags & MSG_FLAG_ANTI) && (msg->raw_flags & MSG_FLAG_PROCESSED)){
-			// Is in msg_queue and will be freed there.
-			continue;
-		}
-		pubsub_thread_msg_free(array_get_at(past_local_pubsubs, i));
-	}
-	array_fini(past_local_pubsubs);
-
-	for (array_count_t i = 0; i < array_count(past_remote_pubsubs); ++i) {
-		// No check: remote pubsubs are NOT requeued upon antimessaging
-		pubsub_thread_msg_free(array_get_at(past_remote_pubsubs, i));
-	}
-	array_fini(past_remote_pubsubs);
-
 	for (array_count_t i = 0; i < array_count(free_on_gvt_pubsubs); ++i) {
 		pubsub_msg_free(array_get_at(free_on_gvt_pubsubs, i));
 	}
 	array_fini(free_on_gvt_pubsubs);
 
-	for (array_count_t i = 0; i < array_count(early_pubsub_antis); ++i) {
-		msg_allocator_free(array_get_at(early_pubsub_antis, i));
-	}
-	array_fini(early_pubsub_antis);
+	// This implements freeing of messages too, as the map becomes the
+	// owner of the messages we put in it
+	pubsub_map_fini(&remote_pubsubs_map);
 
 #if LOG_LEVEL <= LOG_DEBUG
 	fclose(pubsub_msgs_logfile);
@@ -371,32 +304,6 @@ void sub_node_handle_published_message(struct lp_msg* msg)
 	msg_allocator_free(msg);
 }
 
-static inline bool check_early_anti_pubsub_messages(struct lp_msg *msg)
-{
-	uint32_t m_id;
-	if (likely(!array_count(early_pubsub_antis) || !(m_id = msg->raw_flags >> MSG_FLAGS_BITS)))
-		return false;
-	uint32_t m_seq = msg->m_seq;
-//	if (!m_id) // Already checked above
-//		return false;
-	for (array_count_t i = 0; i < array_count(early_pubsub_antis); ++i) {
-		struct lp_msg *a_msg = array_get_at(early_pubsub_antis, i);
-		if (a_msg->raw_flags == m_id && a_msg->m_seq == m_seq) {
-			// The thread level was extracted and never processed.
-			msg->raw_flags-=MSG_FLAG_PUBSUB;
-			msg_allocator_free(msg);
-			// TODO: use lp_msg_remote_match for early_antis.
-			// Shift or it could appear to have some flags set.
-			a_msg->raw_flags<<=MSG_FLAGS_BITS;
-			msg_allocator_free(a_msg);
-			array_get_at(early_pubsub_antis, i) = array_peek(early_pubsub_antis);
-			--array_count(early_pubsub_antis);
-			return true;
-		}
-	}
-	return false;
-}
-
 /* In ProcessPublishedEvent the user creates the message resulting from
  * the published one. The message is created using ScheduleNewEvent.
  * This will schedule the generated event and will push a pointer to it
@@ -407,13 +314,18 @@ static inline bool check_early_anti_pubsub_messages(struct lp_msg *msg)
 // This function is called when a thread extracts a pubsub message from its queue
 void thread_handle_published_message(struct lp_msg* msg){
 
-	if (unlikely(check_early_anti_pubsub_messages(msg)))
-		return;
-
-	uint32_t flags = atomic_fetch_add_explicit(&msg->flags, MSG_FLAG_PROCESSED, memory_order_relaxed);
-	if (unlikely(flags & MSG_FLAG_ANTI)) {
-		pubsub_thread_msg_free(msg);
-		return;
+	if(msg->raw_flags >> MSG_FLAGS_BITS) {
+		// Check early antimsgs
+		if (unlikely(pubsub_map_add(&remote_pubsubs_map, msg) != NULL)) {
+			msg_allocator_free(msg);
+			return;
+		}
+	} else {
+		uint32_t flags = atomic_fetch_add_explicit(&msg->flags, MSG_FLAG_PROCESSED, memory_order_relaxed);
+		if (unlikely(flags & MSG_FLAG_ANTI)) {
+			// local thread-level pubsubs are now owned by their parent
+			return;
+		}
 	}
 
 	/*
@@ -498,7 +410,7 @@ void thread_handle_published_message(struct lp_msg* msg){
 				// Cannot process. Push child message in queue
 				msg_queue_insert(child_msg);
 			} else {
-				// Updated: child message is now processed here
+				// Child message is now processed here
 				process_msg(child_msg);
 			}
 		}
@@ -507,12 +419,6 @@ void thread_handle_published_message(struct lp_msg* msg){
 		pi->m_arr[i] = child_msg;
 
 	}
-#ifdef ROOTSIM_MPI
-	if(msg->raw_flags >> MSG_FLAGS_BITS)
-		pubsub_insert_in_remote_past(msg);
-	else
-#endif
-		pubsub_insert_in_past(msg);
 }
 
 // ok
@@ -601,9 +507,6 @@ void sub_node_handle_published_antimessage(struct lp_msg *msg)
 		pubsub_msg_queue_insert(child_msg);
 	}
 
-	// Remove the flag to make it be freed as a normal msg
-	msg->raw_flags -= MSG_FLAG_PUBSUB;
-
 	/* This msg is only a blueprint: Free it right now */
 	msg_allocator_free(msg);
 }
@@ -654,25 +557,7 @@ void pub_node_handle_published_antimessage(struct lp_msg *msg)
 		}
 	}
 
-	pubsub_free_on_gvt(msg);
-}
-
-/// Gets the positive message matching a_msg from past_remote_pubsubs.
-static inline struct lp_msg* get_positive_pubsub_msg(const struct lp_msg *a_msg)
-{
-	uint32_t m_id = a_msg->raw_flags >> MSG_FLAGS_BITS, m_seq = a_msg->m_seq;
-	array_count_t past_i = 0;
-	array_count_t ct = array_count(past_remote_pubsubs);
-	while (past_i<ct) {
-		struct lp_msg *msg = array_get_at(past_remote_pubsubs, past_i);
-		if ((msg->raw_flags >> MSG_FLAGS_BITS) == m_id && msg->m_seq == m_seq) {
-			atomic_fetch_add_explicit(&msg->flags, MSG_FLAG_ANTI, memory_order_relaxed);
-			return msg;
-		}
-		past_i++;
-	}
-
-	return NULL;
+	array_push(free_on_gvt_pubsubs, msg);
 }
 
 // This is called when a pubsub message with ANTI flag set is extracted
@@ -682,24 +567,17 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 	if (!(anti_msg->raw_flags >> MSG_FLAGS_BITS)) {
 		if (anti_msg->raw_flags & MSG_FLAG_PROCESSED){
 			thread_actually_antimessage(anti_msg);
-		} else {
-			// Was still not processed
-			pubsub_thread_msg_free(anti_msg);
 		}
 		return;
 	}
 
 	// Did we process the positive copy of this message already?
-	struct lp_msg *msg = get_positive_pubsub_msg(anti_msg);
-	if (unlikely(!msg)) {
-		// No, store for later
-		anti_msg->raw_flags >>= MSG_FLAGS_BITS;
-		array_push(early_pubsub_antis, anti_msg);
+	struct lp_msg *msg = pubsub_map_add(&remote_pubsubs_map, anti_msg);
+	if (unlikely(msg == NULL)) {
 		return;
 	}
 
 	// We did
-	anti_msg->raw_flags -= MSG_FLAG_PUBSUB;
 	msg_allocator_free(anti_msg);
 
 	msg->raw_flags += MSG_FLAG_ANTI;
@@ -720,12 +598,10 @@ static void thread_actually_antimessage(struct lp_msg *msg)
 		if (cflags & MSG_FLAG_PROCESSED)
 			msg_queue_insert(cmsg);
 	}
-	// Reset PROCESSED flag!
-	// During cleanup, if a message in past_local_pubsubs has both processed
-	// and anti flags set, then it is in msg_queue and will be freed in
-	// msg_queue_fini.
-	// We cannot free such message before, or we'll read after free.
-	msg->raw_flags -= MSG_FLAG_PROCESSED;
+// 	This was needed for cleanup, to distinguish thread-level pubsubs that
+// 	are still in the incoming queue, and those that are not.
+//	TODO: remove once we figure out how we want to handle this problem
+//	msg->raw_flags -= MSG_FLAG_PROCESSED;
 }
 
 // OK
@@ -856,17 +732,7 @@ void Subscribe(lp_id_t subscriber_id, lp_id_t publisher_id){
 		NULL);
 }
 
-// OK
 // Free a (node level) pubsub msg
-// If the message is node-level, then it will have local children and possibly
-//  MPI children and will properly behave
-// If the message is thread-level, then this was called from outside pubsub.c,
-// meaning that it was called by msg_allocator_free
-// message_allocator_free may only be called on a pubsub msg in one of two cases:
-// 1. When fossil collecting => the message is node-level pubsub
-// 2. When cleaning up (msg_queue_fini) => the message is thread level.
-// In case 2, the thread-level message will not have any children
-// the check on c_ptr will thus fail and behave exactly as pubsub_thread_msg_free
 void pubsub_msg_free(struct lp_msg* msg)
 {
 	struct t_pubsub_info *pi = &msg->pubsub_info;
@@ -877,39 +743,35 @@ void pubsub_msg_free(struct lp_msg* msg)
 	// how many children were destined to MPI
 	if (likely(children_ct)) {
 		array_count_t local_children = array_count(subscribersTable[msg->dest]);
-		children_ct -= local_children;
-		// Free children for MPI
+		array_count_t remote_children = children_ct - local_children;
+		// Free children
 		for (size_t i = 0; i < children_ct; i++){
-			msg_allocator_free(pi->m_arr[i]);
+			if(i < remote_children) {
+				msg_allocator_free(pi->m_arr[i]);
+			} else {
+				pubsub_thread_msg_free(pi->m_arr[i]);
+			}
 		}
 	}
 	// Free the array pointing to children
-	// The local children will be freed independently
 	mm_free(pi->m_arr);
+	msg_allocator_free(msg);
 }
 
 void pubsub_thread_msg_free(struct lp_msg* msg)
 {
-	// Works for both node and thread-level
-	// No race conditions: either GVT>dest_t, or already antimsgd
-	msg->raw_flags &= ~MSG_FLAG_PUBSUB;
-
 	mm_free(msg->pubsub_info.m_arr);
-
 	msg_allocator_free(msg);
 }
 
 // Pubsub free to be used by msg_queue_fini.
 void pubsub_thread_msg_free_in_fini(struct lp_msg* msg)
 {
-	msg->raw_flags &= ~MSG_FLAG_PUBSUB;
-	// Since we reuse messages, a remote antimessage could point to freed
-	// memory via its m_arr pointer if the message was a pubsub in its
-	// previous life, or hold a garbage address if it was never written.
-	if (!(msg->raw_flags >> MSG_FLAGS_BITS && msg->raw_flags & MSG_FLAG_ANTI)) {
-		mm_free(msg->pubsub_info.m_arr);
+	// msg is local
+	if(!(msg->raw_flags >> MSG_FLAGS_BITS)){
+		return;
 	}
-
+	// Only free remote  messages (=>unprocessed)
 	msg_allocator_free(msg);
 }
 
@@ -930,15 +792,6 @@ void pubsub_msg_queue_insert(struct lp_msg* msg){
 
 void pubsub_on_gvt(simtime_t current_gvt)
 {
-	// Fossil collect past_local_pubsubs
-	for(array_count_t i = array_count(past_local_pubsubs); i--;) {
-		struct lp_msg *msg = array_get_at(past_local_pubsubs, i);
-		if(msg->dest_t >= current_gvt)
-			continue;
-		pubsub_thread_msg_free(msg);
-		array_get_at(past_local_pubsubs, i) = array_pop(past_local_pubsubs);
-	}
-
 	// Fossil collect free_on_gvt_pubsubs
 	for(array_count_t i = array_count(free_on_gvt_pubsubs); i--;){
 		struct lp_msg *msg = array_get_at(free_on_gvt_pubsubs, i);
@@ -948,17 +801,7 @@ void pubsub_on_gvt(simtime_t current_gvt)
 		array_get_at(free_on_gvt_pubsubs, i) = array_pop(free_on_gvt_pubsubs);
 	}
 
-	array_count_t i;
-	// Fossil collect past_remote_pubsubs
-	array_count_t ct = array_count(past_remote_pubsubs);
-	for(i = 0; i < ct; ++i) {
-		struct lp_msg *msg = array_get_at(past_remote_pubsubs, i);
-		if (msg->dest_t >= current_gvt)
-			break;
-
-		pubsub_thread_msg_free(msg);
-	}
-	array_truncate_first(past_remote_pubsubs, i);
+	pubsub_map_fossil_collect(&remote_pubsubs_map, current_gvt);
 }
 
 #if LOG_LEVEL <= LOG_DEBUG

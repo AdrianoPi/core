@@ -1,7 +1,7 @@
 /**
- * @file agent_map.c
+ * @file pubsub_map.c
  *
- * @brief Agent map
+ * @brief Pubsub msgs map
  *
  * SPDX-FileCopyrightText: 2008-2021 HPDCS Group <rootsim@googlegroups.com>
  * SPDX-License-Identifier: GPL-3.0-only

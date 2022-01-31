@@ -289,9 +289,7 @@ void CUBATopology(unsigned long int neuron_count){
 			}
 		}
 	}
-	NewProbe(0);
 	printdbg("Total number of synapses: %llu\n", syn_ct);
-
 }
 
 /* Generates an array a s.t. a[i] contains the index of the first neuron of population i */

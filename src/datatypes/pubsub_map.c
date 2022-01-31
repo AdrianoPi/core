@@ -144,7 +144,6 @@ struct lp_msg *pubsub_map_add(struct pubsub_map *m, struct lp_msg *msg)
 
 void pubsub_map_fossil_collect(struct pubsub_map *m, simtime_t gvt)
 {
-	return;
 	struct pubsub_map_node *rmv = m->n;
 	m->n = mm_alloc(sizeof(*m->n) * (m->capacity_mo + 1));
 	memset(m->n, 0, sizeof(*m->n) * (m->capacity_mo + 1));

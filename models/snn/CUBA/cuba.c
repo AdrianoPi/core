@@ -359,11 +359,14 @@ void bring_to_present(neuron_state_t* state, simtime_t delta_update, simtime_t d
 	if (delta_spike < n_params.refractory_period)
 		return;
 
+	// Amount of time of refractory period that we still have to take into account
 	double remaining = delta_update + n_params.refractory_period - delta_spike;
 
 	if (remaining > 0.0) { // computes currents at end of refractory period
 		Gent = get_Ge_f(remaining, state->Ge);
 		Gint = get_Gi_f(remaining, state->Gi);
+		// Time between refractory period and now
+		delta_update -= remaining;
 	}
 
 	state->membrane_potential = get_V_t(state->helper, state->membrane_potential, Gent, state->Ge, Gint, state->Gi, delta_update);
@@ -374,8 +377,6 @@ void bring_to_present(neuron_state_t* state, simtime_t delta_update, simtime_t d
 simtime_t getNextFireTime(neuron_state_t* state, simtime_t delta_spike){
 	struct neuron_helper_t* n_helper = state->helper;
 
-	// Down here only non-self-spiking neurons are considered.
-	//~ double I0 = state->I;
 	double Ge0 = state->Ge;
 	double Gi0 = state->Gi;
 
@@ -384,9 +385,11 @@ simtime_t getNextFireTime(neuron_state_t* state, simtime_t delta_spike){
 
 	simtime_t delta_t;
 	if (n_params.refractory_period > delta_spike) {
+		// Time till end of refractory period
 		delta_t = n_params.refractory_period - delta_spike;
+		// Currents at end of refractory period
 		Ge0 = get_Ge_f(delta_t, state->Ge);
-		Ge0 = get_Gi_f(delta_t, state->Gi);
+		Gi0 = get_Gi_f(delta_t, state->Gi);
 	} else {
 		delta_t = 0;
 	}

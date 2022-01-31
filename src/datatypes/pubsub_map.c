@@ -148,7 +148,8 @@ void pubsub_map_fossil_collect(struct pubsub_map *m, simtime_t gvt)
 	m->n = mm_alloc(sizeof(*m->n) * (m->capacity_mo + 1));
 	memset(m->n, 0, sizeof(*m->n) * (m->capacity_mo + 1));
 
-	for (array_count_t i = 0, j = 0; j < m->count; ++i, ++j) {
+	array_count_t old_c = m->count;
+	for (array_count_t i = 0, j = 0; j < old_c; ++i, ++j) {
 		while (rmv[i].msg == NULL)
 			++i;
 		if (rmv[i].msg->dest_t < gvt) {

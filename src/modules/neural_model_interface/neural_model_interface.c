@@ -152,7 +152,7 @@ bool CanEnd(lp_id_t me, const void *snapshot) {
 	if (unlikely(((__neuron_s*)snapshot)->is_probed)){
 		return NeuronCanEnd_pr(me, ((__neuron_s*)snapshot)->neuron_state);
 	}
-	return true;
+	return false;
 }
 
 /* Get the state of the current LP */

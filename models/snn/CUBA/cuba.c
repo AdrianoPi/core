@@ -19,7 +19,6 @@
 #define T_TOLERANCE 0.01      //mS
 
 #define e_portion 0.8f
-#define i_portion 0.2f
 
 #define g_El -49.0f			//mV
 #define g_we (60*0.27f/10)	//pA
@@ -254,24 +253,15 @@ void SNNInitTopology(unsigned long int neuron_count){
 	CUBATopology(neuron_count);
 }
 
-// 80% are exc, 20% inhibitory, same as having 5 virtual populations of 20%
-// of total neurons. 4 excitatory and 1 inhibitory. [     e    , i]->[e, e, e, e, i]
-#define n_v_pops 5
-#define n_exc_v_pops 4
-#define n_inh_v_pops 1
-// Get offset inside inhibitory population and convert to absolute ID
-#define inhibitory_to_absolute(ID) ((ID)*n_v_pops)
-// Get offset inside on of excitatory populations and convert to absolute ID
-#define excitatory_to_absolute(ID) ((ID) + (ID)/n_exc_v_pops);
-
 // Creates the network for the CUBA benchmark.
 void CUBATopology(unsigned long int neuron_count){
-	// Number of inhibitory neurons
-	unsigned long int i_count = neuron_count * i_portion;
 	// Number of excitatory neurons
-	unsigned long int e_count = neuron_count - i_count;
+	unsigned long int e_count = e_portion * neuron_count;
+	// Inhibitory neurons
+	unsigned long int i_count = neuron_count - e_count;
 
 	unsigned long int pop_sizes[2] = {e_count, i_count};
+	unsigned long int nn_cum[2] = {0, e_count};
 
 	unsigned long int src_neuron;
 	unsigned long int dst_neuron;
@@ -280,38 +270,18 @@ void CUBATopology(unsigned long int neuron_count){
 
 	double we = g_we;
 	double wi = g_wi;
-
 	double delay = g_syn_delay;
-
 	for(int r = 0; r<2; r++){
-
 		double wt = (r == 0 ? we : wi);
-
 		for(int c=0; c<2; c++){
 			double p = table[r][c];
-
 			unsigned long int nsyns = pop_sizes[r]*pop_sizes[c]*p;
 			printdbg("Synapses from %d to %d: %lu\n", r, c, nsyns);
 			syn_ct += nsyns;
 
 			while(nsyns--){
-//				src_neuron = (unsigned long int) (Random()*(pop_sizes[r])) + nn_cum[r];
-//				dst_neuron = (unsigned long int) (Random()*(pop_sizes[c])) + nn_cum[c];
-
-				src_neuron = (unsigned long int) (Random()*(pop_sizes[r]));
-				dst_neuron = (unsigned long int) (Random()*(pop_sizes[c]));
-
-				if(r==0) { // excitatory src
-					src_neuron = excitatory_to_absolute(src_neuron);
-				} else { // inhibitory src
-					src_neuron = inhibitory_to_absolute(src_neuron);
-				}
-
-				if (c==0) { // excitatory dst
-					dst_neuron = excitatory_to_absolute(dst_neuron);
-				} else { // inhibitory dst
-					dst_neuron = inhibitory_to_absolute(dst_neuron);
-				}
+				src_neuron = (unsigned long int) (Random()*(pop_sizes[r])) + nn_cum[r];
+				dst_neuron = (unsigned long int) (Random()*(pop_sizes[c])) + nn_cum[c];
 
 				synapse = NewSynapse(src_neuron, dst_neuron, sizeof(synapse_t), true, delay);
 				if(synapse==NULL){continue;} // Synapse is on remote node
@@ -320,9 +290,7 @@ void CUBATopology(unsigned long int neuron_count){
 		}
 	}
 	NewProbe(0);
-
 	printdbg("Total number of synapses: %llu\n", syn_ct);
-
 
 }
 
@@ -337,8 +305,7 @@ void gen_indexes(unsigned int * popsizes, unsigned int *out, int size){
 
 /* Get population index from neuron ID */
 int n2pop(unsigned long int neuron_ID){
-	return (int) ((neuron_ID % 5) < 4);
-	return (int) neuron_ID > (unsigned long int) e_portion * n_lps;
+	return (int) neuron_ID > (unsigned long int) (e_portion * n_lps);
 }
 
 

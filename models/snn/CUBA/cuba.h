@@ -31,12 +31,11 @@ struct neuron_helper_t {
 
 typedef struct neuron_state_t{
 	struct neuron_helper_t *helper;
-	unsigned long int times_fired;
-	
+
 	double membrane_potential; // [mV]
 	double Ge; 		// [pA]
 	double Gi; 		// [pA]
-	
+
 	simtime_t last_fired; // For refractory period
 	simtime_t last_updated;
 } neuron_state_t;

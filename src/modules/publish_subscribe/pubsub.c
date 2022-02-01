@@ -8,8 +8,8 @@
 
 #define LP_ID_MSB (((lp_id_t) 1) << (sizeof(lp_id_t) * CHAR_BIT - 1))
 
-#define PUBSUB_PRINT_TOPOLOGY true
-#define PUBSUB_DUMP_MSGS true
+#define PUBSUB_PRINT_TOPOLOGY false
+#define PUBSUB_DUMP_MSGS false
 
 bool bitmap_check_bit(struct block_bitmap* bitmap, int bit){
 	return bitmap_check(bitmap, bit);

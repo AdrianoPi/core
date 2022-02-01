@@ -53,6 +53,7 @@ void ScheduleNewEvent_pr(lp_id_t receiver, simtime_t timestamp,
 		array_push(proc_p->p_msgs, mark_msg_remote(msg));
 	} else {
 		atomic_store_explicit(&msg->flags, 0U, memory_order_relaxed);
+		msg->m_seq=0;
 		msg_queue_insert(msg);
 		array_push(proc_p->p_msgs, mark_msg_sent(msg));
 	}

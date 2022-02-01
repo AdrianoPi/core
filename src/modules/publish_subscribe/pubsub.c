@@ -477,6 +477,7 @@ void PubsubDeliver(simtime_t timestamp, unsigned event_type, const void *event_c
 
 	// Message is directed to self.
 	delivered_pubsub->raw_flags = 0U;
+	delivered_pubsub->m_seq = 0U;
 }
 
 // Ok?

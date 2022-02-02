@@ -144,12 +144,12 @@ void process_lp_fini(void)
 {
 	struct process_data *proc_p = &current_lp->p;
 
-#if LOG_LEVEL <= LOG_DEBUG && defined(PUBSUB)
 	// FIXME: does this work if termination time is not specified?
-	// We want to log committed pubsub messages this lp has sent
-	log_pubsub_msgs_to_file(proc_p->p_msgs.items,
-				array_count(proc_p->p_msgs));
-#endif
+	if(PUBSUB_DUMP_MSGS) {
+		// We want to log committed pubsub messages this lp has sent
+		log_pubsub_msgs_to_file(proc_p->p_msgs.items,
+					array_count(proc_p->p_msgs));
+	}
 
 	for (array_count_t i = 0; i < array_count(proc_p->p_msgs); ++i) {
 		struct lp_msg *msg = array_get_at(proc_p->p_msgs, i);

@@ -40,10 +40,10 @@ void fossil_lp_on_gvt(struct lp_ctx *lp, simtime_t current_gvt)
 
 	past_i = model_allocator_fossil_lp_collect(&lp->mm_state, past_i + 1);
 
-#if LOG_LEVEL <= LOG_DEBUG && defined(PUBSUB)
-	// We want to log committed pubsub messages this lp has sent
-	log_pubsub_msgs_to_file(proc_p->p_msgs.items, past_i);
-#endif
+	if (PUBSUB_DUMP_MSGS) {
+		// We want to log committed pubsub messages this lp has sent
+		log_pubsub_msgs_to_file(proc_p->p_msgs.items, past_i);
+	}
 
 	array_count_t k = past_i;
 	while (k--) {

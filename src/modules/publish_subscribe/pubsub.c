@@ -9,16 +9,13 @@
 #define LP_ID_MSB (((lp_id_t) 1) << (sizeof(lp_id_t) * CHAR_BIT - 1))
 
 #define PUBSUB_PRINT_TOPOLOGY false
-#define PUBSUB_DUMP_MSGS false
 
 bool bitmap_check_bit(struct block_bitmap* bitmap, int bit){
 	return bitmap_check(bitmap, bit);
 }
 
-#if LOG_LEVEL <= LOG_DEBUG
 // File for logging pubsub messages
 static __thread FILE *pubsub_msgs_logfile;
-#endif
 
 #define unmark_msg(msg_p) \
 	((struct lp_msg *)(((uintptr_t)(msg_p)) & (UINTPTR_MAX - 3)))
@@ -124,18 +121,17 @@ void pubsub_module_global_fini(){
 void pubsub_module_init(){
 	pubsub_map_init(&remote_pubsubs_map);
 	array_init(free_on_gvt_pubsubs);
-#if LOG_LEVEL <= LOG_DEBUG
-	// Open logging file
-	char* fname = malloc(strlen("pubsub_msgs_n_t.log") + 100);
-	sprintf(fname, "pubsub_msgs_n%d_t%d.log", nid, rid);
-	pubsub_msgs_logfile = fopen(fname, "w");
-	setvbuf(pubsub_msgs_logfile, NULL, _IOFBF, 4096);
-	fprintf(pubsub_msgs_logfile, "LP, send_time\n");
-	free(fname);
-#endif
+	if (PUBSUB_DUMP_MSGS) {
+		// Open logging file
+		char *fname = malloc(strlen("pubsub_msgs_n_t.log") + 100);
+		sprintf(fname, "pubsub_msgs_n%d_t%d.log", nid, rid);
+		pubsub_msgs_logfile = fopen(fname, "w");
+		setvbuf(pubsub_msgs_logfile, NULL, _IOFBF, 4096);
+		fprintf(pubsub_msgs_logfile, "LP, send_time\n");
+		free(fname);
+	}
 }
 
-#if LOG_LEVEL <= LOG_DEBUG
 void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 	if (!PUBSUB_DUMP_MSGS) return;
 	// Since dyn_arrays are unnamed structs, we work with the items element
@@ -147,11 +143,10 @@ void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 
 		// Only log pubsubs that have not been undone
 		if(is_pubsub_msg(msg)){
-			fprintf(pubsub_msgs_logfile, "%lu, %.15lf\n", msg->send, msg->send_t);
+			fprintf(pubsub_msgs_logfile, "%lu, %.15lf\n", msg->send, msg->dest_t);
 		}
 	}
 }
-#endif
 
 void pubsub_module_fini(){
 	for (array_count_t i = 0; i < array_count(free_on_gvt_pubsubs); ++i) {
@@ -163,9 +158,8 @@ void pubsub_module_fini(){
 	// owner of the messages we put in it
 	pubsub_map_fini(&remote_pubsubs_map);
 
-#if LOG_LEVEL <= LOG_DEBUG
-	fclose(pubsub_msgs_logfile);
-#endif
+	if (PUBSUB_DUMP_MSGS)
+		fclose(pubsub_msgs_logfile);
 }
 
 /// This is called when a local LP publishes a message.

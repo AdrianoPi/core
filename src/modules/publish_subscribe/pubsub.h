@@ -10,6 +10,7 @@
 #include <distributed/mpi.h>
 
 #define is_fresh_pubsub_msg(msg)	(lid_to_nid((msg)->dest) != nid)
+#define PUBSUB_DUMP_MSGS false
 
 extern void pubsub_module_lp_init(void);
 extern void pubsub_module_lp_fini(void);

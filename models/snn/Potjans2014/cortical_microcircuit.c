@@ -1,4 +1,4 @@
-#include "shimoura.h"
+#include "cortical_microcircuit.h"
 
 //~ #define M_DEBUG                // Undefine to decrease verbosity
 

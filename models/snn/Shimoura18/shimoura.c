@@ -15,19 +15,14 @@
 #define MODEL_MAX_SIMTIME global_config.termination_time
 
 #define V_TOLERANCE 0.01 //mV
-#define I_TOLERANCE 0.01 //pA
 #define T_TOLERANCE 0.01 //mS
 
-#define FIRE_THRESHOLD 800.0d
-
-#define SYNAPSE_WEIGHT 87.8d
-
-#define CONNECTIONS 1
+#define doubleEquals(a, b, epsilon) (fabs((a)-(b)) < (epsilon))
 
 __thread unsigned long long int syn_ct = 0;
 
-// Parameters used in Shimoura18
-const struct neuron_params_t n_params = {
+// Parameters used in Potjans2014
+static const struct neuron_params_t n_params = {
 	.threshold = -50.0,
 	.reset_potential = -65.0,
 	.inv_tau_m = 1/10.0,
@@ -50,11 +45,9 @@ const struct neuron_params_t n_params = {
 #define g_I_ext			0.002 //* 0.001				//# [pA] External current
 
 /* Called at the start of the spike handling. Updates the state of the neuron from the last update to now */
-void bring_to_present(neuron_state_t* state, simtime_t now);
+void bring_to_present(neuron_state_t* state, simtime_t delta_upd, simtime_t delta_spike);
 /* Compute the next time at which the neuron will fire, if any */
-simtime_t getNextFireTime(neuron_state_t* state);
-/* Are a and b within epsilon from each other? */
-inline bool doubleEquals(double a, double b, double epsilon);
+simtime_t getNextFireTime(neuron_state_t* state, simtime_t delta_spike);
 /* The neuron will spike. Find out how long it will take */
 double findSpikeDeltaNewton(struct neuron_helper_t *params, double V0, double I0, double time_interval);
 double findSpikeDeltaBinary(struct neuron_helper_t *params, double V0, double I0, double time_interval);
@@ -68,8 +61,8 @@ extern double get_I_f(double delta_t, double I0);
 inline double get_V_t(struct neuron_helper_t *params, double V0, double I0, double I1, double delta_t);
 extern double get_V_t(struct neuron_helper_t *params, double V0, double I0, double I1, double delta_t);
 
-/* Initializes the topology of Shimoura18 */
-void ShimouraTopology();
+/* Initializes the topology of Potjans2014's Cortical microcircuit */
+void MicrocircuitTopology();
 
 void printNeuronState(neuron_state_t* state);
 /* Generates an array a s.t. a[i] contains the index of the first neuron of population i */
@@ -119,6 +112,20 @@ unsigned int thal = 0;
 unsigned int* bg_layer;
 
 FILE* outFile = NULL;
+
+static const double exp_adj[] = {
+	1.036199565629158, 1.027277981818330, 1.019341151369058,
+	1.012316468833528, 1.006139353234098, 1.000751255315155,
+	0.996100136699148, 0.992140185571610, 0.988830196962552,
+	0.986132544047804, 0.984013562521051, 0.982443170190283,
+	0.981394102987059, 0.980841516073624, 0.980763042138659,
+	0.981138430277712, 0.981957925989939, 0.983178546312421,
+	0.984811614558841, 0.986834419454900, 0.989234236856811,
+	0.991999812972351, 0.995121060808105, 0.998588377827231,
+	1.002392956865277, 1.006527340270889, 1.010984919213803,
+	1.015759089560808, 1.020843804511367, 1.026234345941742,
+	1.031901110282296, 1.037916082604387
+};
 
 unsigned int v0type = 0;
 double original_v0_mean[] = {-58.0, -58.0, -58.0, -58.0, -58.0, -58.0, -58.0, -58.0};
@@ -236,6 +243,16 @@ void model_parse (int key, const char *arg){
 	}
 }
 
+static inline double csexp(double x)
+{
+	int64_t tmp = 1512775L * x + 1072632447L;
+	int i = (tmp >> 15) & ((1 << 5) - 1);
+	tmp <<= 32;
+	double r;
+	memcpy(&r, &tmp, sizeof(r));
+	return r * exp_adj[i];
+}
+
 /* Initialize the neuron */
 void* NeuronInit(unsigned long int me){
 	
@@ -260,8 +277,6 @@ neuron_state_t* InitLIFNeuron(unsigned long int me){
 		//INIZIALIZZA TUTTO DENTRO ST_PARAMS
 		if(stim==1){
 			n_helper->Iext = (0.3512*bg_layer[pop]);
-			//~ my_st_params->Iext = g_I_ext;
-			//~ my_st_params->Iext = 0;
 			printdbg("Iext: %lf\n", n_helper->Iext);
 		} else {
 			n_helper->Iext = 0;
@@ -278,7 +293,6 @@ neuron_state_t* InitLIFNeuron(unsigned long int me){
 	}
 	
 	state->helper = n_helper;
-	state->times_fired = 0;
 	state->last_updated = 0;
 	state->I = 0.0;
 	state->last_fired = -(n_params.refractory_period + 1);
@@ -302,22 +316,22 @@ void NeuronHandleSpike(unsigned long int me, simtime_t now, double value, void* 
 	
 	neuron_state_t* state = (neuron_state_t*) neuron_state;
 	
-	simtime_t fireTime = -1.0;
+	simtime_t fireTime;
 	
 	printdbg("[N%lu] Spike received with value: %lf at %lf\n", me, value, now);
-	printNeuronState(state);
-	
+
+	simtime_t delta_spike = now - state->last_fired;
 	// This brings the neuron to present. Computes and updates I and V.
-	bring_to_present(state, now);
+	bring_to_present(state, now - state->last_updated, delta_spike);
 	// Apply the spike
 	state->I += value;
-	state->last_updated = now; // Unnecessary, bring_to_present already updates it
+	state->last_updated = now;
 	
 	printdbg("[N%lu] updated values: ", me);
 	printNeuronState(state);
 	
 	/* Now we have to compute the point in time - if any - at which this neuron will spike with the current values */
-	fireTime = getNextFireTime(state);
+	fireTime = getNextFireTime(state, delta_spike);
 	printdbg("[N%lu] Next spike time is %lf\n", me, fireTime);
 	
 	if (fireTime > 0.0){ // Spike might happen in future
@@ -356,27 +370,23 @@ void NeuronWake(unsigned long int me, simtime_t now, void* n_state){
 		PoissonWake(me, now);
 		return;
 	}
-	
 
 	neuron_state_t* state = n_state;
-	
-	bring_to_present(state, now);
-	
+	simtime_t t_since_last_eval = now - state->last_updated;
+	state->I = get_I_f(t_since_last_eval, state->I);
 	state->membrane_potential = n_params.reset_potential;
-	state->times_fired++;
+//	state->times_fired++;
 	state->last_fired = now;
 	state->last_updated = now;
 	printNeuronState(state);
 	
 	/* Now we have to compute the point in time - if any - at which this neuron will spike with the current values */
-	double fireTime = -1.0;
-	fireTime = getNextFireTime(state);
+	double fireTime = getNextFireTime(state, 0);
 	printdbg("[N%lu] Next spike time is %lf\n", me, fireTime);
 	
 	if (fireTime > 0.0){ // Spike might happen in future
 		MaybeSpikeAndWake(me, fireTime);
 	}
-	return;
 }
 
 /* synapse handles the spike by updating its state and *returning* the spike intensity */
@@ -389,11 +399,7 @@ double SynapseHandleSpike(simtime_t now, unsigned long int src_neuron, unsigned 
 }
 
 /* is the neuron done? */
-bool NeuronCanEnd(unsigned long int me, neuron_state_t* state){	
-	//~ if(state->times_fired >= SPIKE_MAX){
-		//~ printdbg("[N%lu] Spikes: %lu, CanEnd!!!\n", me, state->times_fired);
-	//~ }
-	
+bool NeuronCanEnd(unsigned long int me, neuron_state_t* state){
 	//~ return (state->times_fired >= SPIKE_MAX);
 	return false;
 }
@@ -407,23 +413,20 @@ void GatherStatistics(simtime_t now, unsigned long int neuron_id, const neuron_s
 	if(neuron_id >= 77169) {return;}//Poisson neuron
 
 	if(outFile == NULL){//First neuron to write. Open file and write
-		char* fname = malloc(strlen("Shimoura18Run_") + 10);
-		sprintf(fname, "Shimoura18Run_%lu", neuron_id);
-//		sprintf(fname + strlen("Shimoura18Run_"), "%lu", neuron_id);
+		char* fname = malloc(strlen("Potjans2014Run_") + 10);
+		sprintf(fname, "Potjans2014Run_%lu", neuron_id);
+//		sprintf(fname + strlen("Potjans2014Run_"), "%lu", neuron_id);
 		outFile = fopen(fname, "w");
 		free(fname);
 	}
-	
-	fprintf(outFile, "N%lu, s%lu\n", neuron_id, state->times_fired);
-	
 }
 
 void SNNInitTopology(unsigned long int neuron_count){
-	ShimouraTopology();
+	MicrocircuitTopology();
 }
 
 /* Initializes the topology */
-void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
+void MicrocircuitTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 	int nsyn_type = 0;
 
 	// Index of the first neuron for every population
@@ -514,16 +517,7 @@ void ShimouraTopology(){//(stim, bg_type, w_ex, g, bg_freq, nsyn_type, thal)
 		syn_ct += nsyn;
 		//printdbg("TotalSynapses %llu\n", syn_ct);
 	}
-	
-	
-	//###########################################################################
-	//# Creating spike monitors
-	//###########################################################################
-//	for(unsigned long int i=0; i<nn_cum[7]; i++){ //Probe every neuron
-//		NewProbe(i);
-//	}
-	NewProbe(0);
-	
+
 	if(bg_type==2){free(bg_layer);}
 }
 
@@ -609,77 +603,34 @@ void get_bg_layer(int bg_type){
 /* Called at the start of the spike handling. Updates the state of the neuron from the last update to now.
  * We are certain that the neuron did not spike from the last time it was updated to now.
  * So we don't need to do calculations to account for that */
-void bring_to_present(neuron_state_t* state, simtime_t now){
-	struct neuron_helper_t *n_helper = state->helper;
-	
+void bring_to_present(neuron_state_t* state, simtime_t delta_update, simtime_t delta_spike){
 	/*
-	 * t0 = state->last_updated
-	 * tf = now
-	 * I0 = state->I
-	 * V0 = state->membrane_potential
+	 * delta_update = now - state->last_updated
+	 * delta_spike = now - state->last_spiked
 	 * */
-	
-	double delta_t;
-	double If;
-	
-	simtime_t ref_end = state->last_fired + n_params.refractory_period; // When will refractory period end
-	
-	if(ref_end > state->last_updated){ // The neuron is in refractory period at t0
-		printdbg("BTP: neuron is still in refractory period: last_updated: %lf, ref_end: %lf\n", state->last_updated, ref_end);
-		
-		state->membrane_potential = n_params.reset_potential; // Potential is clamped to reset potential
-		
-		if (ref_end >= now){ // Refractory lasts at least till now time. Only update the current and don't touch membrane potential
-			printdbg("BTP: refractory period lasts further than now: %lf\n", now);
-			printNeuronState(state);
-			delta_t = now - state->last_updated;
-			If = get_I_f(delta_t, state->I);
-			
-			state->I = If;
-			state->last_updated = now;
-			printdbg("BTP: computed new I\n");
-			printNeuronState(state);
-			return;
-		
-		} else { // Skip the remaining refractory period by updating I to the value it will have at the end of it
-			printdbg("BTP: handling refractory period\n");
-			printNeuronState(state);
-			delta_t = ref_end - state->last_updated;
-			If = get_I_f(delta_t, state->I);
-			
-			//Update I
-			state->I=If;
-			// Remember to update the time!
-			state->last_updated = ref_end;
-			printdbg("BTP: computed new I\n");
-			printNeuronState(state);
-			
-		}
-	}
-	//~ }
-	printdbg("BTP: bringing neuron values to present\n");
-	// Now refractory is out of the way. Compute the new values for I and Vm
-	delta_t = now - state->last_updated;
-	
-	printdbg("BTP: delta_t: %lf\n", delta_t);
-	
-	If = get_I_f(delta_t, state->I);
-	
-	printdbg("BTP: If: %lf\n", If);
-	
-	double dvdt = (-state->membrane_potential + n_params.reset_potential)* n_params.inv_tau_m + (state->I + n_helper->Iext)*(n_params.inv_C_m);
-	printdbg("BTP: dV/dt: %lf\n", dvdt); // Questo mi esce 0 ma V cresce uguale... Errore di calcolo da qualche parte?
-	
-	double V = get_V_t(n_helper, state->membrane_potential, state->I, If, delta_t);
-	
-	printdbg("BTP: Vf: %lf\n", V);
-	
-	state->membrane_potential = V;
+
+	struct neuron_helper_t *n_helper = state->helper;
+
+	double If = get_I_f(delta_update, state->I);
+	double Ient = state->I;
 	state->I = If;
-	state->last_updated = now;
+
+	if (delta_spike < n_params.refractory_period)
+		return;
+
+	// Amount of time of refractory period that we still have to take into account
+	double remaining = delta_update + n_params.refractory_period - delta_spike;
+
+	if (remaining > 0.0) {// computes current at end of refractory period
+		Ient = get_I_f(remaining, state->I);
+		delta_update -= remaining;
+	}
+
+	// Update membrane potential from end of refractory to now
+	state->membrane_potential = get_V_t(state->helper, state->membrane_potential, Ient, If, delta_update);
 }
 
-simtime_t getNextFireTime(neuron_state_t* state){
+simtime_t getNextFireTime(neuron_state_t* state, simtime_t delta_spike){
 	struct neuron_helper_t* n_helper = state->helper;
 	
 	/* Necessary condition for the membrane to reach threshold potential:
@@ -689,53 +640,46 @@ simtime_t getNextFireTime(neuron_state_t* state){
 	double Icond = state->helper->Icond;
 	
 	printdbg("getFT: Icond: %lf\n", Icond);	
-	
-	// Down here only non-self-spiking neurons are considered.
+
 	double I0 = state->I;
 	simtime_t t0 = state->last_updated;
 	double V0 = state->membrane_potential;
 	
-	printNeuronState(state);
+//	printNeuronState(state);
 	
 	/* Check that the condition for spiking is met.
 	 * Since I decays towards 0 with the passing of time (regardless of whether I is positive or negative),
 	 * if the spiking condition is not met at the start, it will never be met.
 	 * Unless a spike is received. But that is a future event.*/
-	if (n_helper->A2 < n_params.threshold && I0 < Icond){// Neuron is not self-spiking and I<Icond
-		printdbg("getFT: I %lf < Icond %lf. Will never spike\n", I0, Icond);
-		return -1; // Can never spike this way. Return
-	}
-	
-	double delta_t;
-	double ref_end = state->last_fired + n_params.refractory_period;
-	
-	printdbg("getFT: Ref_end: %lf\n", ref_end);
-	
+//	TODO: check that the changes do not break any assumption made for non-self-spiking neurons,
+//	 then uncomment this and remove the abort below. The code should be ok though
+//	if (n_helper->A2 < n_params.threshold && I0 < Icond){// Neuron is not self-spiking and I<Icond
+//		printdbg("getFT: I %lf < Icond %lf. Will never spike\n", I0, Icond);
+//		return -1; // Can never spike this way. Return
+//	}
+
+	// Time until end of refractory period
+	simtime_t delta_t;
 	/* Now check if we are still in refractory period */
-	if(ref_end > state->last_updated){
-		
-		t0 = ref_end; // When will refractory period end, new t0
-		
-		delta_t = t0 - state->last_updated;
-		I0 = get_I_f(delta_t, I0);
-		V0 = n_params.reset_potential; // Potential is clamped to reset potential
-		printdbg("getFT: Ref period out of the way\n");
-		printdbg("New V0: %lf, I0: %lf, t0: %lf\n", V0, I0, t0);
+	if(n_params.refractory_period > delta_spike){
+
+		delta_t = n_params.refractory_period - delta_spike;
+		// Current at end of refractory period
+		I0 = get_I_f(delta_t, state->I);
+	} else {
+		delta_t = 0;
 	}
 	/* Refractory done */
 	
 	/* If A2>Vth the neuron is self spiking and we need to
 	 * check when it will spike regardless of the value of I*/
 	if(n_helper->A2 > n_params.threshold){ // Neuron is self spiking
-		delta_t = findSpikeDeltaBinaryBlind(n_helper, V0, I0);
-		if (delta_t<=0){
-			printf("Something went wrong: neuron is self spiking, but next spike time was not found\n");
-			abort();
-		}
-		return t0 + delta_t;
+		return t0 + findSpikeDeltaBinaryBlind(n_helper, V0, I0) + delta_t;
 	}
-	
-	// Neuron is not self spiking and we proceed with the correct approach
+
+	abort(); // TODO: check that the changes do not break any assumption made below, then remove the abort
+
+	// Neuron is not self spiking
 	if (I0 < Icond){
 		printdbg("getFT: I %lf < Icond %lf. Will never spike\n", I0, Icond);
 		return -1; // Can never spike this way. Return
@@ -751,7 +695,6 @@ simtime_t getNextFireTime(neuron_state_t* state){
 	 * this will stay true for at least as long as I>Icond. i.e. for all t in [t', t_upper].
 	 * Thus, if V(t_upper) >= Vth, we crossed Vth once in [t0,t_upper]. Otherwise, we never did. QED
 	 * */
-	//delta_t = -(log(Icond/I0) * g_tau_syn);
 	delta_t = -(log(Icond/I0) / n_params.inv_tau_syn); //Divide by the inverse
 	printdbg("getFT: delta_t for Icond: %lf\n", delta_t);
 	printdbg("getFT: I at delta_t: %lf\n", get_I_f(delta_t, I0));
@@ -777,18 +720,15 @@ simtime_t getNextFireTime(neuron_state_t* state){
 
 /* Compute the time after which the spike will take place given T0=0, V0 and I0, on a NON-self-spiking neuron. */
 double findSpikeDeltaBinary(struct neuron_helper_t* n_helper, double V0, double I0, double time_interval){
-	double delta_t = 0;
-	
 	double It;
 	double Vt;
 	double tmin = 0;
 	double tmax = time_interval;
-	unsigned int its = 0;
 	
 	// While V is farther than epsilon from Vth
 	do {
 		printdbg("tmin: %lf, tmax: %lf\n", tmin, tmax);
-		delta_t = (tmax + tmin)/2;
+		double delta_t = (tmax + tmin)/2;
 		/* Compute I(delta_t) */
 		It = get_I_f(delta_t, I0);
 		/* Now compute V(delta_t) */
@@ -801,21 +741,27 @@ double findSpikeDeltaBinary(struct neuron_helper_t* n_helper, double V0, double 
 			printdbg("Vt %lf < Vth %lf\n", Vt, n_params.threshold);
 			tmin = delta_t;
 		}
-		its++;
-	} while(!doubleEquals(Vt, n_params.threshold, V_TOLERANCE) || !doubleEquals(tmin, tmax, T_TOLERANCE));
-
-	
-	printdbg("BinarySearch spikedelta: %lf\n", delta_t);
-	return delta_t;
+		if (tmax <= tmin + T_TOLERANCE){
+			printdbg("BinarySearch spikedelta: %lf\n", delta_t);
+			return  delta_t;
+		}
+	} while(1);
 }
 
 inline double get_I_f(double delta_t, double I_i){
-	return exp(-delta_t * n_params.inv_tau_syn) * I_i;
+	return csexp(-delta_t * n_params.inv_tau_syn) * I_i;
 }
 
-inline double get_V_t(struct neuron_helper_t *helper, double V0, double I0, double I1, double delta_t){
+inline double get_V_t_acc(struct neuron_helper_t *helper, double V0, double I0, double I1, double delta_t){
 	/* Now compute V(delta_t) and return it */
 	double aux = (V0 - helper->A2 - I0 * helper->A0) * exp(-delta_t * n_params.inv_tau_m);
+	return (I1 * helper->A0 + helper->A2 + aux);
+}
+extern double get_V_t_acc(struct neuron_helper_t *helper, double V0, double I0, double I1, double delta_t);
+
+inline double get_V_t(struct neuron_helper_t *helper, double V0, double I0, double I1, double delta_t){
+	/* Compute V(t0+delta_t) */
+	double aux = (V0 - helper->A2 - I0 * helper->A0) * csexp(-delta_t * n_params.inv_tau_m);
 	return (I1 * helper->A0 + helper->A2 + aux);
 }
 
@@ -823,40 +769,33 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper){
 	// Would hang
 	if(n_helper->A2 < n_params.threshold) return -1;
 	
-	double delta_t = 0;
+	double delta_t;
 	
 	double Vt;
-	double It;
 	double tmin = 0;
 	double tmax = 50;
-	double step = 50;
 	
 	// While Vt is below Vth
-	while(tmin < MODEL_MAX_SIMTIME){// !isinf(delta_t)) {
+	while(1) {
 		/* Now compute V(delta_t) */
-		Vt = get_V_t(n_helper, n_params.reset_potential, 0, 0, tmax);
+		Vt = get_V_t_acc(n_helper, n_params.reset_potential, 0, 0, tmax);
 		
 		if (Vt >= n_params.threshold){
 			printdbg("delta_t: %lf, Vt %lf > Vth %lf\n", tmax, Vt, n_params.threshold);
 			break;
-		} else {
-			printdbg("delta_t: %lf, Vt %lf < Vth %lf\n", tmax, Vt, n_params.threshold);
-			tmin = tmax;
-			//~ tmax = tmax + step;
-			tmax *=2;
 		}
-	}
-	
-	if(tmin > MODEL_MAX_SIMTIME){//isinf(delta_t)){
-		return -1;
-	}
+
+		printdbg("delta_t: %lf, Vt %lf < Vth %lf\n", tmax, Vt, n_params.threshold);
+		tmin = tmax;
+		tmax *=2;
+	} // We have a cap for the spike time
 	
 	// While V is farther than epsilon from Vth
 	do {
 		printdbg("tmin: %lf, tmax: %lf\n", tmin, tmax);
 		delta_t = (tmax + tmin)/2;
 		/* Now compute V(delta_t) */
-		Vt = get_V_t(n_helper, n_params.reset_potential, 0, 0, delta_t);
+		Vt = get_V_t_acc(n_helper, n_params.reset_potential, 0, 0, delta_t);
 		
 		if (Vt > n_params.threshold){
 			printdbg("Vt %lf > Vth %lf\n", Vt, n_params.threshold);
@@ -865,7 +804,7 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper){
 			printdbg("Vt %lf < Vth %lf\n", Vt, n_params.threshold);
 			tmin = delta_t;
 		}
-	} while(!doubleEquals(Vt, n_params.threshold, V_TOLERANCE) || !doubleEquals(tmin, tmax, T_TOLERANCE));
+	} while(tmax > tmin + T_TOLERANCE);
 	
 	printdbg("SelfSpikeTime spikedelta: %lf\n", delta_t);
 	return delta_t;
@@ -874,44 +813,32 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper){
 /* Compute the time after which the spike will take place given T0=0, V0 and I0,
  * on a neuron where Icond is < 0 and as such, no upper bound is available for the spike time. */
 double findSpikeDeltaBinaryBlind(struct neuron_helper_t* helper, double V0, double I0){
-	double delta_t = 0;
-	
 	double Vt;
 	double It;
 	double tmin = 0;
-	double tmax = helper->self_spike_time;
-	double step = helper->self_spike_time;
-	
-	if (step <= 0) {
-		printf("FSDBB: SOMETHING WRONG HAPPENED\n");
-		fflush(stdout);
-		abort();
-	}
+	double tmax = helper->self_spike_time*2;
 
 	// While Vt is below Vth
 	printdbg("FSDBB: Neuron is self spiking\n");
 	while(true) {
-		delta_t = tmax;
-		/* Compute I(delta_t) */
-		It = get_I_f(delta_t, I0);
-		/* Now compute V(delta_t) */
-		Vt = get_V_t(helper, V0, I0, It, delta_t);
+		/* Compute I(tmax) */
+		It = get_I_f(tmax, I0);
+		/* Now compute V(tmax) */
+		Vt = get_V_t(helper, V0, I0, It, tmax);
 		
 		if (Vt >= n_params.threshold){
-			printdbg("FSDBB: delta_t: %lf, Vt %lf > Vth %lf\n", delta_t, Vt, n_params.threshold);
+			printdbg("FSDBB: delta_t: %lf, Vt %lf > Vth %lf\n", tmax, Vt, n_params.threshold);
 			break;
-		} else {
-			printdbg("FSDBB: delta_t: %lf, Vt %lf < Vth %lf\n", delta_t, Vt, n_params.threshold);
-			tmin = tmax;
-			tmax = tmax + step;
-			//~ tmax *=2;
 		}
+		printdbg("FSDBB: delta_t: %lf, Vt %lf < Vth %lf\n", tmax, Vt, n_params.threshold);
+		tmin = tmax;
+		tmax *= 2;
 	}
 	
 	// While V is farther than epsilon from Vth
 	do {
 		printdbg("tmin: %lf, tmax: %lf\n", tmin, tmax);
-		delta_t = (tmax + tmin)/2;
+		double delta_t = (tmax + tmin)/2;
 		/* Compute I(delta_t) */
 		It = get_I_f(delta_t, I0);
 		/* Now compute V(delta_t) */
@@ -924,16 +851,12 @@ double findSpikeDeltaBinaryBlind(struct neuron_helper_t* helper, double V0, doub
 			printdbg("Vt %lf < Vth %lf\n", Vt, n_params.threshold);
 			tmin = delta_t;
 		}
-	} while(!doubleEquals(Vt, n_params.threshold, V_TOLERANCE) && !doubleEquals(tmin, tmax, T_TOLERANCE));
-	
-	printdbg("FSDBB spikedelta: %lf\n", delta_t);
-	return delta_t;
+		if(tmax <= tmin + T_TOLERANCE){
+			printdbg("FSDBB spikedelta: %lf\n", delta_t);
+			return delta_t;
+		}
+	} while(1);
 }
-
-inline bool doubleEquals(double a, double b, double epsilon){
-	return fabs(a-b) < epsilon;
-}
-extern bool doubleEquals(double a, double b, double epsilon);
 
 void printNeuronState(neuron_state_t* state){
 	printdbg("V: %lf, I: %lf, last_up: %lf, last_spike: %lf\n", state->membrane_potential, state->I, state->last_updated, state->last_fired);

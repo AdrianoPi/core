@@ -266,7 +266,7 @@ static inline array_count_t match_straggler_msg(
 	array_count_t i = array_count(proc_p->p_msgs) - 1;
 	const struct lp_msg *msg = array_get_at(proc_p->p_msgs, i);
 	while (1) {
-		if (msg_is_before(msg, s_msg))
+		if (!msg_is_before(s_msg, msg))
 			return i + 1;
 		while (1) {
 			if (!i)

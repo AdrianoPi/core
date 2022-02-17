@@ -28,10 +28,7 @@
 #include <modules/retractable/retractable.h>
 
 #define q_elem_is_before(ma, mb) ((ma).t < (mb).t || 		\
-	((ma).t == (mb).t && (ma).m->raw_flags > (mb).m->raw_flags) || \
-	((ma).t == (mb).t && (ma).m->raw_flags == (mb).m->raw_flags && (ma).m->m_type > (mb).m->m_type) || \
-	((ma).t == (mb).t && (ma).m->raw_flags == (mb).m->raw_flags && (ma).m->m_type == (mb).m->m_type && (ma).m->send > (mb).m->send) || \
-	((ma).t == (mb).t && (ma).m->raw_flags == (mb).m->raw_flags && (ma).m->m_type == (mb).m->m_type && (ma).m->send == (mb).m->send && (ma).m->m_seq < (mb).m->m_seq))
+	((ma).t == (mb).t && msg_is_before_extended((ma).m, (mb).m)))
 
 struct q_elem {
 	simtime_t t;

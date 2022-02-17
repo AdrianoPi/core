@@ -21,10 +21,10 @@
 #include <stdlib.h>
 
 enum rootsim_event {
-	MODEL_INIT = 65532,
-	LP_INIT,
+	MODEL_FINI = 65532,
 	LP_FINI,
-	MODEL_FINI
+	LP_INIT,
+	MODEL_INIT
 };
 
 typedef double simtime_t;

@@ -12,9 +12,10 @@
 
 #include <core/core.h>
 
+#include <limits.h>
 #include <stdatomic.h>
 #include <stddef.h>
-#include <limits.h>
+#include <string.h>
 #include <datatypes/array.h>
 
 #define BASE_PAYLOAD_SIZE 16
@@ -22,10 +23,7 @@
 #define msg_is_before_serial(ma, mb) ((ma)->dest_t < (mb)->dest_t)
 
 #define msg_is_before(ma, mb) ((ma)->dest_t < (mb)->dest_t || 		\
-	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags > (mb)->raw_flags) || \
-	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags == (mb)->raw_flags && (ma)->m_type > (mb)->m_type) || \
-	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags == (mb)->raw_flags && (ma)->m_type == (mb)->m_type && (ma)->send > (mb)->send) || \
-	((ma)->dest_t == (mb)->dest_t && (ma)->raw_flags == (mb)->raw_flags && (ma)->m_type == (mb)->m_type && (ma)->send == (mb)->send && (ma)->m_seq < (mb)->m_seq))
+	((ma)->dest_t == (mb)->dest_t && msg_is_before_extended((ma), (mb))))
 
 #define msg_bare_size(msg) (offsetof(struct lp_msg, pl) + (msg)->pl_size)
 #define msg_anti_size() (offsetof(struct lp_msg, m_type) + sizeof(uint32_t))
@@ -98,3 +96,18 @@ enum msg_flag {
 
 #define MSG_FLAGS_BITS 4
 
+static inline bool msg_is_before_extended(const struct lp_msg *restrict a,
+					  const struct lp_msg *restrict b)
+{
+	if ((a->raw_flags & MSG_FLAG_ANTI) != (b->raw_flags & MSG_FLAG_ANTI))
+		return (a->raw_flags & MSG_FLAG_ANTI) >
+		       (b->raw_flags & MSG_FLAG_ANTI);
+
+	if (a->m_type != b->m_type)
+		return a->m_type > b->m_type;
+
+	if (a->pl_size != b->pl_size)
+		return a->pl_size < b->pl_size;
+
+	return memcmp(a->pl, b->pl, a->pl_size) > 0;
+}

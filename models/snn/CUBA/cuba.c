@@ -88,6 +88,50 @@ double table[2][2]={{0.02,  0.02},\
 
 FILE* outFile = NULL;
 
+enum{
+    OPT_SCALING = 129
+};
+
+struct ap_option model_options[] = {
+	{"scaling", OPT_SCALING, "VALUE",
+		"Scaling factor applied to population connection probability."
+		" conn_prob = conn_prob * scaling.\n"
+	},
+	{0}
+};
+
+void model_parse (int key, const char *arg){
+	switch (key) {
+		case AP_KEY_FINI:
+			break;
+		case AP_KEY_INIT:
+			break;
+		case OPT_SCALING:
+		{
+			double conn_scaling;
+			if(sscanf(arg, "%lf", &conn_scaling) != 1) {
+				printf("Could not parse scaling option\n");
+				abort();
+			}
+			if (conn_scaling <= 0.0){
+				printf("Option scaling has to be positive.\n");
+				abort();
+			}
+			for (int i=0; i<2; ++i){
+				for (int j=0; j<2; ++j){
+					table[i][j] *= conn_scaling;
+				}
+			}
+			break;
+		}
+		default:
+		{
+			printf("Argument not recognized\n");
+			abort();
+		}
+	}
+}
+
 static const double exp_adj[] = {
 		1.036199565629158, 1.027277981818330, 1.019341151369058,
 		1.012316468833528, 1.006139353234098, 1.000751255315155,

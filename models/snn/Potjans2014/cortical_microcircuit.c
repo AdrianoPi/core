@@ -22,7 +22,7 @@
 __thread unsigned long long int syn_ct = 0;
 
 // Parameters used in Potjans2014
-static const struct neuron_params_t n_params = {
+static struct neuron_params_t n_params = {
 	.threshold = -50.0,
 	.reset_potential = -65.0,
 	.inv_tau_m = 1/10.0,
@@ -139,7 +139,8 @@ double* v0_std = optimized_v0_std;
 enum{
 	OPT_PROTOCOL = 129,
 	OPT_V0_TYPE = 130,
-	OPT_SCALING = 131
+	OPT_SCALING = 131,
+	OPT_TAU_M
 };
 
 struct ap_option model_options[] = {
@@ -159,6 +160,9 @@ struct ap_option model_options[] = {
 	{"scaling", OPT_SCALING, "VALUE",
 		"Scaling factor applied to population connection probability."
 		" conn_prob = conn_prob * scaling.\n"
+	},
+	{"tau_m", OPT_TAU_M, "VALUE",
+		"Custom value for membrane time constant. Default: 10.0.\n"
 	},
 	{0}
 };
@@ -256,6 +260,20 @@ void model_parse (int key, const char *arg){
 					table[i][j] *= conn_scaling;
 				}
 			}
+			break;
+		}
+		case OPT_TAU_M:
+		{
+			double tau_m;
+			if(sscanf(arg, "%lf", &tau_m) != 1) {
+				printf("Could not parse tau_m option\n");
+				abort();
+			}
+			if (tau_m <= 0.0){
+				printf("Option tau_m has to be positive.\n");
+				abort();
+			}
+			n_params.inv_tau_m = 1.0/tau_m;
 			break;
 		}
 		default:

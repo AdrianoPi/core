@@ -209,7 +209,7 @@ void pub_node_handle_published_message(struct lp_msg* msg)
 			n_pi->m_arr[it] = mpi_msg;
 
 			mpi_remote_msg_send(mpi_msg, dest_nid);
-			
+
 			++it;
 			++dest_nid;
 		} while (it < subbed_nodes);
@@ -321,6 +321,8 @@ void thread_handle_published_message(struct lp_msg* msg){
 			return;
 		}
 	}
+
+	stats_take(STATS_MSG_PUBSUB, 1);
 
 	/*
 	 * The parent message keeps track of its children by keeping
@@ -582,6 +584,7 @@ void thread_handle_published_antimessage(struct lp_msg *anti_msg){
 /// Carries out antimessaging of thread-level pubsub message
 static void thread_actually_antimessage(struct lp_msg *msg)
 {
+	stats_take(STATS_MSG_PUBSUB_ANTI, 1);
 	struct t_pubsub_info *pi = &msg->pubsub_info;
 
 	for (size_t i = 0; i < pi->m_cnt; i++) {

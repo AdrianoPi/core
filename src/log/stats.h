@@ -35,6 +35,7 @@ enum stats_thread_type {
 	STATS_REAL_TIME_GVT, // used internally, don't use elsewhere
 	STATS_MSG_PUBSUB,
 	STATS_MSG_PUBSUB_ANTI,
+	STATS_MSG_PUBSUB_COMMITTED,
 	STATS_COUNT,
 };
 

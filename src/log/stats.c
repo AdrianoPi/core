@@ -69,6 +69,7 @@ const char * const s_names[] = {
 	[STATS_MSG_PROCESSED] = "processed messages",
 	[STATS_REAL_TIME_GVT] = "gvt real time",
 	[STATS_MSG_PUBSUB] = "pubsub messages",
+	[STATS_MSG_PUBSUB_COMMITTED] = "committed pubsubs",
 	[STATS_MSG_PUBSUB_ANTI] = "pubsub antimessages",
 };
 

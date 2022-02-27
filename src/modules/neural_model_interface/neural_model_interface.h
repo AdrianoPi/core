@@ -1,8 +1,8 @@
+#pragma once
 #include <core/core.h>
 #include <lib/lib_internal.h>
 #include <datatypes/array.h>
 //#include <errno.h>
-
 #include <lp/lp.h>
 
 // for ScheduleLocalSpike

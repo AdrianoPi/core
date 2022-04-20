@@ -173,14 +173,9 @@ void NeuronHandleSpike(unsigned long int me, simtime_t now, double value, void* 
 	// This brings the neuron to present. Computes and updates I and V.
 	bring_to_present(state, now);
 
-	// MODIFICA
-	//~ simtime_t ref_end = state->last_fired + n_params.refractory_period; // When will refractory period end
-	//~ if (ref_end<=now){
 	// Apply the spike
 	state->I += value;
 	state->last_updated = now; // Unnecessary, bring_to_present already updates it
-	//~ }
-
 
 	printdbg("[N%lu] updated values: ", me);
 	printNeuronState(state);
@@ -259,10 +254,6 @@ double SynapseHandleSpike(simtime_t now, unsigned long int src_neuron, unsigned 
 
 /* is the neuron done? */
 bool NeuronCanEnd(unsigned long int me, neuron_state_t* state){
-	//~ if(state->times_fired >= SPIKE_MAX){
-		//~ printdbg("[N%lu] Spikes: %lu, CanEnd!!!\n", me, state->times_fired);
-	//~ }
-
 	//~ return (state->times_fired >= SPIKE_MAX);
 	return false;
 }
@@ -273,17 +264,7 @@ void ProbeRead(simtime_t now, unsigned long int monitored_neuron, const neuron_s
 }
 
 void GatherStatistics(simtime_t now, unsigned long int neuron_id, const neuron_state_t* state){
-
-	double spike_frequency = 1000 * state->times_fired/now;
-	//~ double spike_freq_till_last = 1000 * state->times_fired/state->last_updated;
-
-	if(outFile == NULL){//First neuron to write. Open file and write
-		outFile = fopen("Test1kNeuronsRun", "w");
-	}
-
-	//~ fprintf(outFile, "N%lu, f%lf\n", neuron_id, spike_freq_till_last);
-	fprintf(outFile, "N%lu, f%lf, c%lu\n", neuron_id, spike_frequency, state->times_fired);
-
+	return;
 }
 
 void ThousandNeuronsTopology();

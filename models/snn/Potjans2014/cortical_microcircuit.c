@@ -451,12 +451,13 @@ void ProbeRead(simtime_t now, unsigned long int monitored_neuron, const neuron_s
 }
 
 void GatherStatistics(simtime_t now, unsigned long int neuron_id, const neuron_state_t* state){
+	return;
+	
 	if(neuron_id >= 77169) {return;}//Poisson neuron
 
 	if(outFile == NULL){//First neuron to write. Open file and write
 		char* fname = malloc(strlen("Potjans2014Run_") + 10);
 		sprintf(fname, "Potjans2014Run_%lu", neuron_id);
-//		sprintf(fname + strlen("Potjans2014Run_"), "%lu", neuron_id);
 		outFile = fopen(fname, "w");
 		free(fname);
 	}

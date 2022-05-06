@@ -351,9 +351,9 @@ void snn_module_init(){// Init the neuron memory here (memory manager is up and 
 	prev_unif = ctx->unif;
 	prev_has_normal = ctx->has_normal;
 	
-	// Init RNG with a fixed seed
+	// Init RNG with the user-provided seed
 	//~ random_init(current_lp->lib_ctx_p->rng_s, 0, 42);
-	random_init(ctx->rng_s, 0, 42);
+	random_init(ctx->rng_s, 0, global_config.prng_seed);
 	ctx->unif=NAN;
 	ctx->has_normal=false;
 	

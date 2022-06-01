@@ -12,11 +12,7 @@
 
 #undef M_DEBUG
 
-#define MODEL_MAX_SIMTIME global_config.termination_time
-
-#define T_TOLERANCE 0.01 // mS
-
-#define CONNECTIONS 1
+#define T_TOLERANCE 0.0001 // mS
 
 // Parameters used in Shimoura18
 const struct neuron_params_t n_params = {.threshold = -50.0,
@@ -208,7 +204,7 @@ void read_topology_from_file(FILE * file){
                 printf("Excitatory weight: %lf\n", aux);
                 g_d_ex = strtod(tk, NULL);
                 printf("Excitatory delay: %lf\n", g_d_ex);
-            } else if (g_w_in == 0) {
+            } else if (g_w_in == 0 && aux < 0) {
                 g_w_in = aux;
                 printf("Inhibitory weight: %lf\n", aux);
                 g_d_in = strtod(tk, NULL);
@@ -279,7 +275,7 @@ neuron_state_t *InitLIFNeuron(unsigned long int me)
 	state->last_fired = -(n_params.refractory_period + 1);
 
 	//~ state->membrane_potential = -58.0 + 10 * Normal();
-	state->membrane_potential = -58.0;
+	state->membrane_potential = init_potentials[me];
 	if(state->membrane_potential > n_params.threshold) {
 		state->membrane_potential = n_params.threshold + 0.01;
 	}
@@ -390,11 +386,10 @@ void ReadTopologyInit()
 				if(synapse == NULL) {
 					continue;
 				}
-				synapse->weight = -(g_w_ex);
+                synapse->weight = g_w_in;
 				if(synapse->weight > 0.0) {
 					synapse->weight = 0.0;
 				}
-				synapse->weight *= in_g;
 			}
 		}
 	}

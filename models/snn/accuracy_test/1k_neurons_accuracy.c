@@ -15,11 +15,7 @@
 
 #define MODEL_MAX_SIMTIME global_config.termination_time
 
-#define V_TOLERANCE 0.01 //mV
-#define I_TOLERANCE 0.01 //pA
-#define T_TOLERANCE 0.01 //mS
-
-#define CONNECTIONS 1
+#define T_TOLERANCE 0.001 //mS
 
 const struct neuron_params_t n_params = {
 	.threshold = -50.0,
@@ -78,7 +74,9 @@ static struct neuron_helper_t n_helper_p[7];
 /* NETWORK PARAMETERS v*/
 // Population size per layer
 //							IN		L1e		L1i		L2e		L2i		Out
-unsigned int n_layer[7] = {	100,	200,	200,	200,	200,	100};
+unsigned int n_layer[7] = {	100,	200,	200,	200,	200,	100}; // CORRECT
+// To use another network with 2 neurons
+//unsigned int n_layer[7] = {	1,	299,	200,	200,	200,	100};
 //Tot neurons: 1000
 
 //~ Probability connection table. src v\dest ->
@@ -174,10 +172,10 @@ void read_topology_from_file(FILE * file){
         // Read src neuronID
         char* tk = strtok(read_buf, " ,");
         long src = strtol(tk, NULL, 10);
-        // Starting potential
+        // Starting potential V0
         tk = strtok(NULL, ", ");
         init_potentials[src] = strtod(tk, NULL);
-        // Input current
+        // Input current Iext
         tk = strtok(NULL, ", ");
         if (g_I_ext == 0) {
             double aux = strtod(tk, NULL);
@@ -198,7 +196,7 @@ void read_topology_from_file(FILE * file){
                 printf("Excitatory weight: %lf\n", aux);
                 g_d_ex = strtod(tk, NULL);
                 printf("Excitatory delay: %lf\n", g_d_ex);
-            } else if (g_w_in == 0) {
+            } else if (g_w_in == 0 && aux < 0) {
                 g_w_in = aux;
                 printf("Inhibitory weight: %lf\n", aux);
                 g_d_in = strtod(tk, NULL);
@@ -222,9 +220,6 @@ void read_topology_from_file(FILE * file){
         read_topology[src][cur] = -1;
     }
 }
-
-
-
 
 /* Initialize the neuron */
 void* NeuronInit(unsigned long int me){
@@ -263,7 +258,7 @@ neuron_state_t* InitLIFNeuron(unsigned long int me){
 	state->last_fired = -(n_params.refractory_period + 1);
 
 	//~ state->membrane_potential = -58.0 + 10 * Normal();
-	state->membrane_potential = -58.0;
+    state->membrane_potential = init_potentials[me];
 	if(state->membrane_potential > n_params.threshold){
 		state->membrane_potential = n_params.threshold + 0.01;
 	}
@@ -293,7 +288,7 @@ void NeuronHandleSpike(unsigned long int me, simtime_t now, double value, void* 
 	fireTime = getNextFireTime(state);
 	printdbg("[N%lu] Next spike time is %lf\n", me, fireTime);
 
-	if (fireTime > -0.000001){ // Spike might happen in future
+	if (fireTime > 0.0){ // Spike might happen in future
 		MaybeSpikeAndWake(me, fireTime);
 	}
 
@@ -316,7 +311,7 @@ void NeuronWake(unsigned long int me, simtime_t now, void* n_state){
 	fireTime = getNextFireTime(state);
 	printdbg("[N%lu] Next spike time is %lf\n", me, fireTime);
 
-	if (fireTime > -0.000001){ // Spike might happen in future
+	if (fireTime > 0.0){ // Spike might happen in future
 		MaybeSpikeAndWake(me, fireTime);
 	}
 	return;
@@ -373,9 +368,8 @@ void ReadTopologyInit(){
                 if(delay < 0.1){delay=0.1;}
                 synapse = NewSynapse(src_neuron, dst_neuron, sizeof(synapse_t), true, delay);
                 if(synapse==NULL){continue;}
-                synapse->weight = -(g_w_ex);
+                synapse->weight = g_w_in;
                 if(synapse->weight > 0.0){synapse->weight = 0.0;}
-                synapse->weight *= in_g;
             }
         }
     }
@@ -549,13 +543,6 @@ simtime_t getNextFireTime(neuron_state_t* state){
 		return -1;
 	}
 	// Case a: V>=Vth. Neuron spiked at ts in [t0, t_upper]
-	/* Here if we have V=Vth AND dV/dt = 0, we just touched Vth as a max. Check if this is the case */
-	double dvdt = (-V + n_params.reset_potential)*(n_params.inv_tau_m) + (Icond + n_helper->Iext)*(n_params.inv_C_m);
-	if(doubleEquals(V, n_params.threshold, V_TOLERANCE) && doubleEquals(dvdt, 0.0, V_TOLERANCE)){
-		return t0 + delta_t;
-	}
-
-	/* Otherwise */
 	return t0 + findSpikeDeltaBinary(n_helper, V0, I0, delta_t);
 }
 
@@ -586,7 +573,7 @@ double findSpikeDeltaBinary(struct neuron_helper_t* n_helper, double V0, double 
 			tmin = delta_t;
 		}
 		its++;
-	} while(!doubleEquals(Vt, n_params.threshold, V_TOLERANCE) || !doubleEquals(tmin, tmax, T_TOLERANCE));
+	} while((tmax - tmin) > T_TOLERANCE);
 
 
 	printdbg("BinarySearch spikedelta: %lf\n", delta_t);
@@ -648,7 +635,7 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper){
 			printdbg("Vt %lf < Vth %lf\n", Vt, n_params.threshold);
 			tmin = delta_t;
 		}
-	} while(!doubleEquals(Vt, n_params.threshold, V_TOLERANCE) || !doubleEquals(tmin, tmax, T_TOLERANCE));
+	} while((tmax - tmin) > T_TOLERANCE);
 
 	printdbg("SelfSpikeTime spikedelta: %lf\n", delta_t);
 	return delta_t;
@@ -707,7 +694,7 @@ double findSpikeDeltaBinaryBlind(struct neuron_helper_t* helper, double V0, doub
 			printdbg("Vt %lf < Vth %lf\n", Vt, n_params.threshold);
 			tmin = delta_t;
 		}
-	} while(!doubleEquals(Vt, n_params.threshold, V_TOLERANCE) && !doubleEquals(tmin, tmax, T_TOLERANCE));
+	} while((tmax - tmin) > T_TOLERANCE);
 
 	printdbg("FSDBB spikedelta: %lf\n", delta_t);
 	return delta_t;

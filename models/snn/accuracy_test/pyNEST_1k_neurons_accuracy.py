@@ -126,6 +126,17 @@ if __name__ == "__main__":
     # Set input population's input current.
     pops[0].set(I_e=iexts[0])
 
+    all_neurons = [pop for pop in pops]    
+    offset = 0
+    for p in all_neurons:
+        ct = 0
+        for index, nrn in enumerate(p):
+            nrn.set(V_m=init_potentials[offset+index])
+            ct+=1
+        offset+=ct
+        
+    del(all_neurons)
+    
     # Create connections with all_to_all as we provide 1 source neuron, and many dst
     # Set static synapse and the receptor type.
     conn_dict = {'rule': 'one_to_one', "allow_multapses":True}
@@ -143,10 +154,10 @@ if __name__ == "__main__":
             nest.Connect([src+1]*len(dsts),  dsts, conn_dict, syn_spec="exc_syn") 
         else:
             nest.Connect([src+1]*len(dsts),  dsts, conn_dict, syn_spec="inh_syn") 
-
-    connections = nest.GetConnections()
     
     if ONLY_PRINT_CONNECTIONS:
+        connections = nest.GetConnections()
+        
         with open(f"nest_connections_{str(datetime.datetime.now()).replace(' ', '')}", "w") as f:
             connections_gotten = connections.get(["source", "target"])
             # ~ conn_list = list(zip(connections_gotten["source"], connections_gotten["target"]))

@@ -2,6 +2,8 @@ name: ROOT-Sim core CI
 
 on:
   push:
+    branches-ignore:
+      - feature/parallel_init
   pull_request:
     branches:
       - master

@@ -127,7 +127,7 @@ void ProcessPublishedEvent(lp_id_t me, simtime_t msg_ts, unsigned int event, con
 			(void) msg_content;
 			(void) size;
 			
-			printdbg("[LP%lu] Received spike at %lf!\n", sender, msg_ts);
+			printdbg("[LP%lu] Received spike at %lf!\n", me, msg_ts);
 			
 			__syn_t *syn = (__syn_t *) synapse;
 			
@@ -324,11 +324,9 @@ void snn_module_init(){// Init the neuron memory here (memory manager is up and 
 		//~ printdbg("[SNN module] Mallocd neuron %lu block state. Setting state...\n", lp_g_id);
 		
 		SetState_pr(state);
-		
-		//~ printdbg("[SNN module] State set\n");
-		
+
 		state->is_probed = 0;
-				
+
 		state->neuron_state = NeuronInit_pr(lp_id);
 		
 		printdbg("[SNN M T%u] Neuron %lu initialized\n", rid, lp_id);
@@ -364,8 +362,6 @@ void snn_module_init(){// Init the neuron memory here (memory manager is up and 
 	memcpy(ctx->rng_s, prev_rng_s, sizeof(uint64_t)*4);
 	ctx->unif = prev_unif;
 	ctx->has_normal = prev_has_normal;
-	
-	return;
 }
 
 void snn_module_fini(){// Deinit the neuron memory here (memory manager is up and running) rather than in ProcessEvent of INIT

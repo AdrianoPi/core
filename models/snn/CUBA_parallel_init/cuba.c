@@ -188,8 +188,15 @@ void *NeuronInit(unsigned long int me)
 	unsigned long int i_count = n_lps - e_count;
 	unsigned long int pop_sizes[2] = {e_count, i_count};
 
+	double **my_table = malloc(2 * sizeof(double *));
+	my_table[0] = malloc(2 * sizeof(double));
+	my_table[1] = malloc(2 * sizeof(double));
 	//	Init topology now
-	ConnectPresynaptics(me, n2pop(me), pop_sizes, 2, (const double**) table);
+	ConnectPresynaptics(me, n2pop(me), pop_sizes, 2, (const double **) my_table);
+
+	free(my_table[0]);
+	free(my_table[1]);
+	free(my_table);
 
 	return state;
 }
@@ -379,6 +386,10 @@ void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
 	}
 
 	printdbg("Neuron %llu has %llu incoming connections\n", my_id, total_synapses);
+}
+
+bool is_excitatory(unsigned int pre_pop) {
+	return !(pre_pop % 2);
 }
 
 // From Luc Devroye's book "Non-Uniform Random Variate Generation." p. 522

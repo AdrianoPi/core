@@ -19,7 +19,7 @@
 
 #define e_portion 0.8f
 
-#define g_El -49.0f            // mV
+#define g_El (-49.0f)            // mV
 #define g_we (60 * 0.27f / 10) // pA
 #define g_wi (-20 * 4.5f / 10) // pA
 // Possible syn delay #1
@@ -90,8 +90,7 @@ double getSelfSpikeTime(struct neuron_helper_t *params);
 neuron_state_t *InitExpLIFNeuron(unsigned long int me);
 /* Connect presynaptic neurons to neuron my_id */
 void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
-    const unsigned long int *pop_sizes, unsigned long int pop_count,
-    const double **conn_prob_table);
+    const unsigned long int *pop_sizes, unsigned long int pop_count);
 
 static struct neuron_helper_t n_helper_p[2];
 
@@ -188,15 +187,8 @@ void *NeuronInit(unsigned long int me)
 	unsigned long int i_count = n_lps - e_count;
 	unsigned long int pop_sizes[2] = {e_count, i_count};
 
-	double **my_table = malloc(2 * sizeof(double *));
-	my_table[0] = malloc(2 * sizeof(double));
-	my_table[1] = malloc(2 * sizeof(double));
 	//	Init topology now
-	ConnectPresynaptics(me, n2pop(me), pop_sizes, 2, (const double **) my_table);
-
-	free(my_table[0]);
-	free(my_table[1]);
-	free(my_table);
+	ConnectPresynaptics(me, n2pop(me), pop_sizes, POPULATIONS_COUNT);
 
 	return state;
 }
@@ -348,8 +340,7 @@ void SNNInitTopology(unsigned long int neuron_count)
 }
 
 void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
-    const unsigned long int *pop_sizes, unsigned long int pop_count,
-    const double **conn_prob_table)
+    const unsigned long int *pop_sizes, unsigned long int pop_count)
 {
 	unsigned long int cumulative_size = 0;
 
@@ -365,8 +356,8 @@ void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
 	// For each presynaptic population
 	for (unsigned int pre_pop = 0; pre_pop < pop_count; pre_pop++) {
 		unsigned long int pre_size = pop_sizes[pre_pop];
-		// conn_prob_table[pre_synaptic][post_synaptic] = connection probability
-		double p = conn_prob_table[pre_pop][my_population];
+		// connection_probability_table[pre_synaptic][post_synaptic] = connection probability from pre to post
+		double p = connection_probability_table[pre_pop][my_population];
 		double weight = (is_excitatory(pre_pop) ? we : wi);
 
 		// Then decide how many presynaptic neurons from that population this neuron has -> binomial distribution

@@ -251,8 +251,6 @@ void* NewSynapse(neuron_id_t src_neuron, neuron_id_t dest_neuron, size_t syn_sta
 			// As of now, using SubscribeAndHandle to manage synapses means they cannot be dynamic.
 			printf("ERROR: Dynamic synapes are disabled with publish/subscribe. Aborting.");
 			abort();
-						
-			//~ setCurLP(src_neuron);
 			
 		}
 	}
@@ -265,9 +263,6 @@ void* NewSynapse(neuron_id_t src_neuron, neuron_id_t dest_neuron, size_t syn_sta
 	}
 	
 	synapse->delay = delay;
-	
-	// Reset current LP to the zeroth of the thread
-	setCurLP(lid_thread_first);
 	
 	return synapse->data;
 }

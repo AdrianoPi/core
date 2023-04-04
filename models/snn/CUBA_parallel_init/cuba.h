@@ -1,7 +1,9 @@
+#pragma once
 #include <ROOT-Sim.h>
 #include <string.h>
 #include <math.h>
 #include <float.h>
+#include "model_topology.h"
 
 //~ #define SPIKE_MAX 100
 

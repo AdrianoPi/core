@@ -12,18 +12,6 @@ typedef struct synapse_t{
 } synapse_t;
 
 
-typedef struct neuron_params_t{
-	double inv_tau_m; // [1/ms]
-	double inv_tau_e; // [1/ms]
-	double inv_tau_i; // [1/ms]
-	double De; // Inverse of (1-tau_m/tau_e)
-	double Di; // Inverse of (1-tau_m/tau_i)
-	double reset_potential; // [mV]
-	double threshold; // [mV]
-	double refractory_period; // [ms]
-} neuron_params_t;
-
-
 struct neuron_helper_t {
 	double El; // [mV]
 	double Q;  // El/(tau_m^2)

@@ -32,24 +32,24 @@ static __thread struct lp_msg *delivered_pubsub = NULL;
 static void thread_actually_antimessage(struct lp_msg *msg);
 extern void pubsub_thread_msg_free(struct lp_msg* msg);
 
-void pprint_subscribers_table();
-void pprint_subscribers_adjacency_list();
+void pprint_subscribers_table(FILE *f);
+void pprint_subscribers_adjacency_list(FILE *f);
 
 // OK
-void pubsub_module_lp_init()
+void pubsub_module_lp_init(void)
 {
 	current_lp->subnodes = mm_alloc(bitmap_required_size(n_nodes));
 	bitmap_initialize(current_lp->subnodes, n_nodes);
 	current_lp->n_remote_sub_nodes = 0;
 }
 
-void pubsub_module_lp_fini(){
+void pubsub_module_lp_fini(void){
 	mm_free(current_lp->subnodes);
 }
 
 // OK
 /// Initializes structures needed for pubsub module
-void pubsub_module_global_init(){
+void pubsub_module_global_init(void){
 	// Right now, the hashtable is simply an array[n_lps]
 	subscribersTable = mm_alloc(sizeof(t_entry_arr)*n_lps);
 	tableLocks = mm_alloc(sizeof(spinlock_t)*n_lps);
@@ -61,7 +61,7 @@ void pubsub_module_global_init(){
 	}
 }
 
-void print_pubsub_topology_to_file(){
+void print_pubsub_topology_to_file(void){
 	if(!PUBSUB_PRINT_TOPOLOGY) return;
 	// Print two json files:
 	// One is the subscribers table
@@ -84,7 +84,7 @@ void print_pubsub_topology_to_file(){
 }
 
 /// Last call to the pubsub module
-void pubsub_module_global_fini(){
+void pubsub_module_global_fini(void){
 #if LOG_LEVEL <= LOG_DEBUG
 	log_log(LOG_DEBUG, "Starting pubsub_module_global_fini\n");
 
@@ -116,7 +116,7 @@ void pubsub_module_global_fini(){
 #endif
 }
 
-void pubsub_module_init(){
+void pubsub_module_init(void){
 	pubsub_map_init(&remote_pubsubs_map);
 	array_init(free_on_gvt_pubsubs);
 	if (PUBSUB_DUMP_MSGS) {
@@ -146,7 +146,7 @@ void log_pubsub_msgs_to_file(struct lp_msg** msg_array, array_count_t size){
 	}
 }
 
-void pubsub_module_fini(){
+void pubsub_module_fini(void){
 	for (array_count_t i = 0; i < array_count(free_on_gvt_pubsubs); ++i) {
 		pubsub_msg_free(array_get_at(free_on_gvt_pubsubs, i));
 	}
@@ -786,18 +786,18 @@ void pubsub_msg_queue_insert(struct lp_msg* msg){
 
 }
 
-void pubsub_on_gvt(simtime_t current_gvt)
+void pubsub_on_gvt(simtime_t cur_gvt)
 {
 	// Fossil collect free_on_gvt_pubsubs
 	for(array_count_t i = array_count(free_on_gvt_pubsubs); i--;){
 		struct lp_msg *msg = array_get_at(free_on_gvt_pubsubs, i);
-		if(msg->dest_t >= current_gvt)
+		if(msg->dest_t >= cur_gvt)
 			continue;
 		pubsub_msg_free(msg);
 		array_get_at(free_on_gvt_pubsubs, i) = array_pop(free_on_gvt_pubsubs);
 	}
 
-	pubsub_map_fossil_collect(&remote_pubsubs_map, current_gvt);
+	pubsub_map_fossil_collect(&remote_pubsubs_map, cur_gvt);
 }
 
 #if LOG_LEVEL <= LOG_DEBUG

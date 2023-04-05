@@ -19,7 +19,7 @@
 
 #define e_portion 0.8f
 
-#define g_El (-49.0f)            // mV
+#define g_El (-49.0f)          // mV
 #define g_we (60 * 0.27f / 10) // pA
 #define g_wi (-20 * 4.5f / 10) // pA
 // Possible syn delay #1
@@ -49,8 +49,10 @@ static struct neuron_params_t n_params = {
  * from the last update to now */
 void bring_to_present(neuron_state_t *state, simtime_t delta_upd,
     simtime_t delta_spike);
+
 /* Compute the next time at which the neuron will fire, if any */
 simtime_t getNextFireTime(neuron_state_t *state, simtime_t delta_spike);
+
 /* Compute the time after which the spike will take place given T0=0, V0 and I0,
  * on a self-spiking neuron. */
 double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
@@ -58,14 +60,18 @@ double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
 
 /* Compute Ge(delta_t) given Ge0, delta_t, and Tau_e */
 inline double get_Ge_f(double delta_t, double Ge0);
+
 extern double get_Ge_f(double delta_t, double Ge0);
+
 /* Compute Gi(delta_t) given Gi0, delta_t, and Tau_i */
 inline double get_Gi_f(double delta_t, double Gi0);
+
 extern double get_Gi_f(double delta_t, double Gi0);
 
 /* Compute V(delta_t) given V0, I0, delta_t, and the parameters*/
 inline double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t);
+
 extern double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t);
 
@@ -73,21 +79,26 @@ extern double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
 void CUBATopology(unsigned long int neuron_count);
 
 void printNeuronState(neuron_state_t *state);
+
 /* Generates an array a s.t. a[i] contains the index of the first neuron of
  * population i */
 void gen_indexes(unsigned int *popsizes, unsigned int *out, int size);
+
 /* Get population index from neuron ID */
 int n2pop(unsigned long int neuron_ID);
+
 /* Extract a value from a binomial disribution */
 unsigned random_binomial(unsigned trials, double p);
 /* Is a population excitatory or inhibitory? */
 bool is_excitatory(unsigned int population_id);
+
 /* Compute the time it takes for a self-spiking neuron to spike with I=0 and
  * V0=Vreset */
 double getSelfSpikeTime(struct neuron_helper_t *params);
 
 /* Initialize a LIF neuron with exponential synapses */
 neuron_state_t *InitExpLIFNeuron(unsigned long int me);
+
 /* Connect presynaptic neurons to neuron my_id */
 void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
     const unsigned long int *pop_sizes, unsigned long int pop_count);
@@ -182,12 +193,13 @@ void *NeuronInit(unsigned long int me)
 
 	neuron_state_t *state = InitExpLIFNeuron(me);
 
-	// FIXME: This is obviously NOT the way to fill these fields. Just for testing purposes.
+	// FIXME: This is obviously NOT the way to fill these fields. Just for
+	// testing purposes.
 	unsigned long int e_count = e_portion * n_lps;
 	unsigned long int i_count = n_lps - e_count;
 	unsigned long int pop_sizes[2] = {e_count, i_count};
 
-	//	Init topology now
+	// Init topology now
 	ConnectPresynaptics(me, n2pop(me), pop_sizes, POPULATIONS_COUNT);
 
 	return state;
@@ -236,7 +248,7 @@ void NeuronHandleSpike(unsigned long int me, simtime_t now, double value,
 
 	neuron_state_t *state = (neuron_state_t *)neuron_state;
 
-	simtime_t fireTime = -1.0;
+	simtime_t fireTime;
 
 	printdbg("[N%lu] Spike received with value: %lf at %lf\n", me, value,
 	    now);
@@ -304,7 +316,9 @@ double SynapseHandleSpike(simtime_t now, unsigned long int src_neuron,
 {
 	//~ printdbg("[Synapse] Spike directed from N %lu to N %lu with value:
 	//%lf\n", src_neuron, dest_neuron, state->weight);
-
+	(void)now;
+	(void)src_neuron;
+	(void)dest_neuron;
 	return state->weight;
 }
 
@@ -312,6 +326,8 @@ double SynapseHandleSpike(simtime_t now, unsigned long int src_neuron,
 /* is the neuron done? */
 bool NeuronCanEnd(unsigned long int me, neuron_state_t *state)
 {
+	(void)me;
+	(void)state;
 	return false;
 }
 
@@ -319,12 +335,18 @@ bool NeuronCanEnd(unsigned long int me, neuron_state_t *state)
 void ProbeRead(simtime_t now, unsigned long int monitored_neuron,
     const neuron_state_t *neuron_state)
 {
+	(void)now;
+	(void)monitored_neuron;
+	(void)neuron_state;
 }
 
 
 void GatherStatistics(simtime_t now, unsigned long int neuron_id,
     const neuron_state_t *state)
 {
+	(void)now;
+	(void)state;
+
 	// TODO: Fill this in to gather statistics and print them to file
 	if(outFile == NULL) { // First neuron to write. Open file and write
 		char *fname = malloc(strlen("CUBARun_") + 50);
@@ -337,6 +359,7 @@ void GatherStatistics(simtime_t now, unsigned long int neuron_id,
 
 void SNNInitTopology(unsigned long int neuron_count)
 {
+	(void)neuron_count;
 }
 
 void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
@@ -354,32 +377,40 @@ void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
 	unsigned long int total_synapses = 0;
 
 	// For each presynaptic population
-	for (unsigned int pre_pop = 0; pre_pop < pop_count; pre_pop++) {
+	for(unsigned int pre_pop = 0; pre_pop < pop_count; pre_pop++) {
 		unsigned long int pre_size = pop_sizes[pre_pop];
-		// connection_probability_table[pre_synaptic][post_synaptic] = connection probability from pre to post
+		// connection_probability_table[pre_synaptic][post_synaptic] =
+		// connection probability from pre to post
 		double p = connection_probability_table[pre_pop][my_population];
 		double weight = (is_excitatory(pre_pop) ? we : wi);
 
-		// Then decide how many presynaptic neurons from that population this neuron has -> binomial distribution
+		// Then decide how many presynaptic neurons from that population
+		// this neuron has -> binomial distribution
 		unsigned long int n_pre = random_binomial(pre_size, p);
 		total_synapses += n_pre;
 
-		// Connect all the presynaptic neurons to this one. (remember to sum the offset!)
-		for (unsigned long int i=0; i<n_pre; i++) {
-			// FIXME: Does this never extract the last neuron of a population?
-			src_neuron = ((unsigned long int)(Random() * pre_size)) + cumulative_size;
-			synapse =
-			    NewSynapse(src_neuron, my_id, sizeof(synapse_t), true, delay);
+		// Connect all the presynaptic neurons to this one. (remember to
+		// sum the offset!)
+		for(unsigned long int i = 0; i < n_pre; i++) {
+			// FIXME: Does this never extract the last neuron of a
+			// population?
+			src_neuron =
+			    ((unsigned long int)(Random() * pre_size)) +
+			    cumulative_size;
+			synapse = NewSynapse(src_neuron, my_id,
+			    sizeof(synapse_t), true, delay);
 			synapse->weight = weight;
 		}
 
 		cumulative_size += pre_size;
 	}
 
-	printdbg("Neuron %llu has %llu incoming connections\n", my_id, total_synapses);
+	printdbg("Neuron %llu has %llu incoming connections\n", my_id,
+	    total_synapses);
 }
 
-bool is_excitatory(unsigned int pre_pop) {
+bool is_excitatory(unsigned int pre_pop)
+{
 	return !(pre_pop % 2);
 }
 
@@ -390,7 +421,8 @@ unsigned random_binomial(unsigned trials, double p)
 		return trials;
 	}
 	unsigned x = 0;
-	double sum = 0, log_q = log(1.0 - p); // todo cache those logarithm value
+	double sum = 0,
+	       log_q = log(1.0 - p); // todo cache those logarithm value
 	while(1) {
 		double r = Random();
 		sum += log(r) / (trials - x);
@@ -405,6 +437,8 @@ unsigned random_binomial(unsigned trials, double p)
  * population i */
 void gen_indexes(unsigned int *popsizes, unsigned int *out, int size)
 {
+	(void)popsizes;
+
 	if(size != 2)
 		return;
 
@@ -500,6 +534,8 @@ inline double get_Gi_f(double delta_t, double Gi_i)
 inline double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t)
 {
+	(void)Ge1;
+	(void)Gi1;
 	/* Now compute V(delta_t) and return it */
 	double aux = (V0 - Ge0 * n_params.De - Gi0 * n_params.Di - helper->Q) *
 	             csexp(-delta_t * n_params.inv_tau_m);
@@ -517,6 +553,9 @@ inline double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
 inline double get_V_t_acc(struct neuron_helper_t *helper, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t)
 {
+	(void)Ge1;
+	(void)Gi1;
+
 	/* Now compute V(delta_t) and return it */
 	double aux = (V0 - Ge0 * n_params.De - Gi0 * n_params.Di - helper->Q) *
 	             exp(-delta_t * n_params.inv_tau_m);
@@ -527,6 +566,7 @@ inline double get_V_t_acc(struct neuron_helper_t *helper, double V0, double Ge0,
 	return (Ge0 * expe * n_params.De + Gi0 * expi * n_params.Di +
 		helper->Q + aux);
 }
+
 extern double get_V_t_acc(struct neuron_helper_t *helper, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t);
 
@@ -539,15 +579,11 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper)
 	if(n_params.threshold > n_helper->El)
 		return -1;
 
-	double delta_t = 0;
+	double delta_t;
 
-	//~ double It;
 	double Vt;
-	double Ge_t;
-	double Gi_t;
 	double tmin = 0;
 	double tmax = 50;
-	double step = 50;
 
 	// While Vt is below Vth
 	while(1) {
@@ -557,13 +593,12 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper)
 
 		if(Vt >= n_params.threshold) {
 			//~ printdbg("delta_t: %lf, Vt %lf > Vth %lf\n", tmax,
-			//Vt, n_params.threshold);
+			// Vt, n_params.threshold);
 			break;
 		}
 		//~ printdbg("delta_t: %lf, Vt %lf < Vth %lf\n", tmax, Vt,
-		//n_params.threshold);
+		// n_params.threshold);
 		tmin = tmax;
-		//~ tmax = tmax + step;
 		tmax *= 2;
 	} // We now have a cap for the spike time
 
@@ -610,11 +645,11 @@ double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
 
 		if(Vt >= n_params.threshold) {
 			//~ printdbg("FSDBB: delta_t: %lf, Vt %lf > Vth %lf\n",
-			//delta_t, Vt, n_params.threshold);
+			// delta_t, Vt, n_params.threshold);
 			break;
 		}
 		//~ printdbg("FSDBB: delta_t: %lf, Vt %lf < Vth %lf\n", delta_t,
-		//Vt, n_params.threshold);
+		// Vt, n_params.threshold);
 		tmin = tmax;
 		tmax *= 2;
 	}
@@ -632,11 +667,11 @@ double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
 
 		if(Vt > n_params.threshold) {
 			//~ printdbg("Vt %lf > Vth %lf\n", Vt,
-			//n_params.threshold);
+			// n_params.threshold);
 			tmax = delta_t;
 		} else {
 			//~ printdbg("Vt %lf < Vth %lf\n", Vt,
-			//n_params.threshold);
+			// n_params.threshold);
 			tmin = delta_t;
 		}
 		if(tmax <= tmin + T_TOLERANCE) {
@@ -648,6 +683,7 @@ double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
 
 void printNeuronState(neuron_state_t *state)
 {
+	(void)state;
 	printdbg("V: %lf, Ge: %lf, Gi: %lf, last_up: %lf, last_spike: %lf\n",
 	    state->membrane_potential, state->Ge, state->Gi,
 	    state->last_updated, state->last_fired);

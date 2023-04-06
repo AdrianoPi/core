@@ -199,8 +199,11 @@ void *NeuronInit(unsigned long int me)
 	unsigned long int i_count = n_lps - e_count;
 	unsigned long int pop_sizes[2] = {e_count, i_count};
 
+	int my_pop = n2pop(me);
+	if(populations[my_pop].record_spikes) NewProbe(me);
+
 	// Init topology now
-	ConnectPresynaptics(me, n2pop(me), pop_sizes, POPULATIONS_COUNT);
+	ConnectPresynaptics(me, my_pop, pop_sizes, POPULATIONS_COUNT);
 
 	return state;
 }
@@ -411,7 +414,7 @@ void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
 
 bool is_excitatory(unsigned int pre_pop)
 {
-	return !(pre_pop % 2);
+	return populations[pre_pop].is_excitatory;
 }
 
 // From Luc Devroye's book "Non-Uniform Random Variate Generation." p. 522
@@ -448,9 +451,15 @@ void gen_indexes(unsigned int *popsizes, unsigned int *out, int size)
 
 
 /* Get population index from neuron ID */
-int n2pop(unsigned long int neuron_ID)
-{
-	return (int)neuron_ID > (unsigned long int)(e_portion * n_lps);
+int n2pop(unsigned long int neuron_ID){
+	for(int i=0; i<POPULATIONS_COUNT; i++){
+		if(neuron_ID < population_sizes[i]){
+			return i;
+		}
+		neuron_ID -= population_sizes[i];
+	}
+	fprintf(stderr, "ID %lu is too big. The neuron belongs to no declared population.\n", neuron_ID);
+	abort();
 }
 
 

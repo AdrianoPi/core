@@ -19,14 +19,16 @@ typedef struct neuron_params_t{
 
 struct neural_population {
 	struct neuron_params_t *parameters;
-	unsigned population_id;
-	unsigned size;
+	unsigned population_id; // TODO: Remove?
+	unsigned size; // TODO: Remove if we move this info to population_sizes?
 	bool is_excitatory;
+	bool record_spikes;
 };
 
 // connection_probability_table[pre][post] Contains the connection probability from pre to post
 extern double connection_probability_table[POPULATIONS_COUNT][POPULATIONS_COUNT];
 extern struct neural_population populations[POPULATIONS_COUNT];
+extern unsigned population_sizes[POPULATIONS_COUNT];
 extern struct simulation_configuration global_config_from_file;
 
 #endif // CORE_MODEL_TOPOLOGY_H

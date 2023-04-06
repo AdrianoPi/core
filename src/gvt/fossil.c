@@ -45,6 +45,7 @@ void fossil_lp_on_gvt(struct lp_ctx *lp, simtime_t current_gvt)
 		// We want to log committed pubsub messages this lp has sent
 		log_pubsub_msgs_to_file(proc_p->p_msgs.items, past_i);
 	}
+	log_spikes_to_file(proc_p->p_msgs.items, past_i);
 
 	array_count_t k = past_i;
 	while (k--) {

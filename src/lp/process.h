@@ -43,3 +43,6 @@ extern void process_lp_fini(void);
 
 extern void process_next_msg(void);
 extern void process_msg(struct lp_msg *msg);
+
+// TODO: move elsewhere
+extern void log_spikes_to_file(struct lp_msg** msg_array, array_count_t size);

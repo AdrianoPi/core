@@ -19,6 +19,7 @@
 #define setCurLP(lp_id) (current_lp = &lps[lp_id])
 
 __thread bool will_spike = 0;
+static __thread FILE *spikes_logfile;
 
 extern void SetState_pr(void* state);
 void schedule_local_spike(lp_id_t receiver, simtime_t timestamp,
@@ -109,11 +110,11 @@ void ProcessEvent(lp_id_t me, simtime_t now, unsigned int event, const void* evt
 		{
 			return;
 		}
-        default:
-        {
-            printf("Unexpected event type. %u Aborting.", event);
-            abort();
-        }
+		default:
+		{
+		    printf("Unexpected event type. %u Aborting.", event);
+		    abort();
+		}
 	}
 
 	if(!will_spike){ // If the neuron did not spike as a result of this event, Deschedule the currently scheduled retractable event
@@ -359,9 +360,19 @@ void snn_module_init(void){// Init the neuron memory here (memory manager is up 
 	memcpy(ctx->rng_s, prev_rng_s, sizeof(uint64_t)*4);
 	ctx->unif = prev_unif;
 	ctx->has_normal = prev_has_normal;
+
+
+	// Open the file to dump spikes to
+	char *fname = malloc(strlen("spikes_n_t.log") + 100);
+	sprintf(fname, "spikes_n%d_t%d.log", nid, rid);
+	spikes_logfile = fopen(fname, "w");
+	setvbuf(spikes_logfile, NULL, _IOFBF, 4096);
+	fprintf(spikes_logfile, "Neuron, spike_time\n");
+	free(fname);
 }
 
 void snn_module_fini(void){// Deinit the neuron memory here (memory manager is up and running) rather than in ProcessEvent of INIT
+	fclose(spikes_logfile);
 
 	// Iterate on LPs owned by this thread
 	for(lp_id_t lp_id = lid_thread_first; lp_id < lid_thread_end; lp_id++){
@@ -384,3 +395,24 @@ void schedule_local_spike(lp_id_t receiver, simtime_t timestamp,
 
 	msg_queue_insert(msg);
 }
+
+#define should_log_spike(msg)						\
+__extension__({								\
+	is_pubsub_msg(msg) && fetch_LP_state((msg)->send)->is_probed;	\
+})
+
+void log_spikes_to_file(struct lp_msg** msg_array, array_count_t size){
+	// Since dyn_arrays are unnamed structs, we work with the items element
+	for(array_count_t i = 0; i < size; i++){
+		struct lp_msg* msg = unmark_msg(msg_array[i]);
+		if (msg->dest_t > global_config.termination_time){
+			return;
+		}
+
+		// Only log pubsubs that have not been undone
+		if(should_log_spike(msg)){
+			fprintf(spikes_logfile, "%lu, %.15lf\n", msg->send, msg->dest_t);
+		}
+	}
+}
+

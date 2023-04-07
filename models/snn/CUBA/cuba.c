@@ -257,8 +257,8 @@ void NeuronWake(unsigned long int me, simtime_t now, void* n_state){
 	neuron_state_t* state = n_state;
 
 	simtime_t t_since_last_eval = now - state->last_updated;
+	state->Ge = get_Ge_f(t_since_last_eval, state->Ge);
 	state->Gi = get_Gi_f(t_since_last_eval, state->Gi);
-	state->Ge = get_Ge_f(t_since_last_eval, state->Gi);
 	state->membrane_potential = n_params.reset_potential;
 	state->last_fired = now;
 	state->last_updated = now;

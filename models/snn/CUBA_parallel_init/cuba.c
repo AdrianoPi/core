@@ -33,18 +33,6 @@
 
 unsigned long long int syn_ct = 0;
 
-// Parameters used in CUBA benchmark
-static struct neuron_params_t n_params = {
-    .inv_tau_m = 1 / 20.0,             // [1/ms]
-    .inv_tau_e = 1 / 5.0,              // [1/ms]
-    .inv_tau_i = 1 / 10.0,             // [1/ms]
-    .De = 1.0 / (1.0 - (20.0 / 5.0)),  // Inverse of (1-tau_m/tau_e)
-    .Di = 1.0 / (1.0 - (20.0 / 10.0)), // Inverse of (1-tau_m/tau_i)
-    .reset_potential = -60.0,          // [mV]
-    .threshold = -50.0,                // [mV]
-    .refractory_period = 5.0           // [ms]
-};
-
 /* Called at the start of the spike handling. Updates the state of the neuron
  * from the last update to now */
 void bring_to_present(neuron_state_t *state, simtime_t delta_upd,
@@ -55,24 +43,24 @@ simtime_t getNextFireTime(neuron_state_t *state, simtime_t delta_spike);
 
 /* Compute the time after which the spike will take place given T0=0, V0 and I0,
  * on a self-spiking neuron. */
-double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
+double findSpikeDeltaBinaryBlind(struct population_data_t *pop_data, double V0,
     double Ge0, double Gi0);
 
 /* Compute Ge(delta_t) given Ge0, delta_t, and Tau_e */
-inline double get_Ge_f(double delta_t, double Ge0);
+inline double get_Ge_f(double inv_tau_e, double delta_t, double Ge_i);
 
-extern double get_Ge_f(double delta_t, double Ge0);
+extern double get_Ge_f(double inv_tau_e, double delta_t, double Ge_i);
 
 /* Compute Gi(delta_t) given Gi0, delta_t, and Tau_i */
-inline double get_Gi_f(double delta_t, double Gi0);
+inline double get_Gi_f(double inv_tau_i, double delta_t, double Gi_i);
 
-extern double get_Gi_f(double delta_t, double Gi0);
+extern double get_Gi_f(double inv_tau_i, double delta_t, double Gi_i);
 
 /* Compute V(delta_t) given V0, I0, delta_t, and the parameters*/
-inline double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
+inline double get_V_t(struct population_data_t *pop_data, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t);
 
-extern double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
+extern double get_V_t(struct population_data_t *pop_data, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t);
 
 /* Initializes the topology of the benchmark */
@@ -94,7 +82,7 @@ bool is_excitatory(unsigned int population_id);
 
 /* Compute the time it takes for a self-spiking neuron to spike with I=0 and
  * V0=Vreset */
-double getSelfSpikeTime(struct neuron_helper_t *params);
+double getSelfSpikeTime(struct population_data_t *pop_data);
 
 /* Initialize a LIF neuron with exponential synapses */
 neuron_state_t *InitExpLIFNeuron(unsigned long int me);
@@ -103,7 +91,7 @@ neuron_state_t *InitExpLIFNeuron(unsigned long int me);
 void ConnectPresynaptics(const unsigned long int my_id, const int my_population,
     const unsigned long int *pop_sizes, unsigned long int pop_count);
 
-static struct neuron_helper_t n_helper_p[2];
+static struct population_data_t all_pop_data[POPULATIONS_COUNT];
 
 /* NETWORK PARAMETERS v*/
 //~ Probability connection table
@@ -118,8 +106,6 @@ struct ap_option model_options[] = {
     {"scaling", OPT_SCALING, "VALUE",
 	"Scaling factor applied to population connection probability."
 	" conn_prob = conn_prob * scaling.\n"},
-    {"tau_m", OPT_TAU_M, "VALUE",
-	"Custom value for membrane time constant. Default: 20.0.\n"},
     {0}};
 
 void model_parse(int key, const char *arg)
@@ -144,19 +130,6 @@ void model_parse(int key, const char *arg)
 				table[i][j] *= conn_scaling;
 			}
 		}
-		break;
-	}
-	case OPT_TAU_M: {
-		double tau_m;
-		if(sscanf(arg, "%lf", &tau_m) != 1) {
-			printf("Could not parse tau_m option\n");
-			abort();
-		}
-		if(tau_m <= 0.0) {
-			printf("Option tau_m has to be positive.\n");
-			abort();
-		}
-		n_params.inv_tau_m = 1.0 / tau_m;
 		break;
 	}
 	default: {
@@ -215,21 +188,27 @@ neuron_state_t *InitExpLIFNeuron(unsigned long int me)
 
 	int pop = n2pop(me);
 
-	struct neuron_helper_t *n_helper = &n_helper_p[pop];
+	struct population_data_t *my_pop_data = &all_pop_data[pop];
+	neuron_params_t n_params = populations[pop].parameters;
+	struct neuron_helper_t *n_helper = &my_pop_data->helper;
 
 	if(!n_helper->self_spike_time) {
-		// INIZIALIZZA TUTTO DENTRO ST_PARAMS
+		my_pop_data->params = n_params;
+
+		// Compute helper values
 		n_helper->El = g_El;
 		n_helper->Q = n_helper->El * n_params.inv_tau_m *
 		              n_params.inv_tau_m; // El/(tau_m^2)
 		printdbg("El: %lf, Q: %lf\n", n_helper_p->El, n_helper_p->Q);
 
-		n_helper->self_spike_time = getSelfSpikeTime(n_helper);
+		n_helper->self_spike_time = getSelfSpikeTime(my_pop_data);
 		printf("Neuron population %d self spike time: %lf\n", pop,
 		    n_helper->self_spike_time);
+
+		my_pop_data->helper = *n_helper;
 	}
 
-	state->helper = n_helper;
+	state->pop_data = my_pop_data;
 	state->last_updated = 0;
 	state->Ge = 0.0;
 	state->Gi = 0.0;
@@ -293,10 +272,11 @@ void NeuronWake(unsigned long int me, simtime_t now, void *n_state)
 
 
 	neuron_state_t *state = n_state;
+	struct neuron_params_t n_params = state->pop_data->params;
 
 	simtime_t t_since_last_eval = now - state->last_updated;
-	state->Gi = get_Gi_f(t_since_last_eval, state->Gi);
-	state->Ge = get_Ge_f(t_since_last_eval, state->Gi);
+	state->Ge = get_Ge_f(n_params.inv_tau_e, t_since_last_eval, state->Ge);
+	state->Gi = get_Gi_f(n_params.inv_tau_i, t_since_last_eval, state->Gi);
 	state->membrane_potential = n_params.reset_potential;
 	state->last_fired = now;
 	state->last_updated = now;
@@ -470,8 +450,10 @@ int n2pop(unsigned long int neuron_ID){
 void bring_to_present(neuron_state_t *state, simtime_t delta_update,
     simtime_t delta_spike)
 {
-	double Gef = get_Ge_f(delta_update, state->Ge);
-	double Gif = get_Gi_f(delta_update, state->Gi);
+	struct neuron_params_t n_params = state->pop_data->params;
+
+	double Gef = get_Ge_f(n_params.inv_tau_e, delta_update, state->Ge);
+	double Gif = get_Gi_f(n_params.inv_tau_i, delta_update, state->Gi);
 
 	double Gent = state->Ge;
 	double Gint = state->Gi;
@@ -488,14 +470,14 @@ void bring_to_present(neuron_state_t *state, simtime_t delta_update,
 	    delta_update + n_params.refractory_period - delta_spike;
 
 	if(remaining > 0.0) { // computes currents at end of refractory period
-		Gent = get_Ge_f(remaining, state->Ge);
-		Gint = get_Gi_f(remaining, state->Gi);
+		Gent = get_Ge_f(n_params.inv_tau_e, remaining, state->Ge);
+		Gint = get_Gi_f(n_params.inv_tau_i, remaining, state->Gi);
 		// Time between refractory period and now
 		delta_update -= remaining;
 	}
 
 	state->membrane_potential =
-	    get_V_t(state->helper, state->membrane_potential, Gent, state->Ge,
+	    get_V_t(state->pop_data, state->membrane_potential, Gent, state->Ge,
 		Gint, state->Gi, delta_update);
 }
 
@@ -503,7 +485,7 @@ void bring_to_present(neuron_state_t *state, simtime_t delta_update,
 // Only takes into account neurons that are self spiking.
 simtime_t getNextFireTime(neuron_state_t *state, simtime_t delta_spike)
 {
-	struct neuron_helper_t *n_helper = state->helper;
+	struct neuron_params_t n_params = state->pop_data->params;
 
 	double Ge0 = state->Ge;
 	double Gi0 = state->Gi;
@@ -516,76 +498,86 @@ simtime_t getNextFireTime(neuron_state_t *state, simtime_t delta_spike)
 		// Time till end of refractory period
 		delta_t = n_params.refractory_period - delta_spike;
 		// Currents at end of refractory period
-		Ge0 = get_Ge_f(delta_t, state->Ge);
-		Gi0 = get_Gi_f(delta_t, state->Gi);
+		Ge0 = get_Ge_f(n_params.inv_tau_e, delta_t, state->Ge);
+		Gi0 = get_Gi_f(n_params.inv_tau_i, delta_t, state->Gi);
 	} else {
 		delta_t = 0;
 	}
 
-	assert(n_helper->El > n_params.threshold); // Neuron is self spiking
-	return t0 + findSpikeDeltaBinaryBlind(n_helper, V0, Ge0, Gi0) + delta_t;
+	assert(state->pop_data->helper.El > n_params.threshold); // Neuron is self spiking
+	return t0 + findSpikeDeltaBinaryBlind(state->pop_data, V0, Ge0, Gi0) + delta_t;
 }
 
 
-inline double get_Ge_f(double delta_t, double Ge_i)
+inline double get_Ge_f(double inv_tau_e, double delta_t, double Ge_i)
 {
-	return csexp(-delta_t * n_params.inv_tau_e) * Ge_i;
+	return csexp(-delta_t * inv_tau_e) * Ge_i;
 }
 
-inline double get_Gi_f(double delta_t, double Gi_i)
+inline double get_Gi_f(double inv_tau_i, double delta_t, double Gi_i)
 {
-	return csexp(-delta_t * n_params.inv_tau_i) * Gi_i;
+	return csexp(-delta_t * inv_tau_i) * Gi_i;
 }
 
 
 // Might want to make another function that computes everything in one, given
 // the state.
-inline double get_V_t(struct neuron_helper_t *helper, double V0, double Ge0,
+inline double get_V_t(struct population_data_t *pop_data, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t)
 {
 	(void)Ge1;
 	(void)Gi1;
+
+	struct neuron_helper_t helper = pop_data->helper;
+	struct neuron_params_t n_params = pop_data->params;
+
 	/* Now compute V(delta_t) and return it */
-	double aux = (V0 - Ge0 * n_params.De - Gi0 * n_params.Di - helper->Q) *
+	double aux = (V0 - Ge0 * n_params.De - Gi0 * n_params.Di - helper.Q) *
 	             csexp(-delta_t * n_params.inv_tau_m);
 
 	double expe = csexp(-delta_t * n_params.inv_tau_e);
 	double expi = csexp(-delta_t * n_params.inv_tau_i);
 
 	return (Ge0 * expe * n_params.De + Gi0 * expi * n_params.Di +
-		helper->Q + aux);
+		helper.Q + aux);
 }
 
 
 // Might want to make another function that computes everything in one, given
 // the state.
-inline double get_V_t_acc(struct neuron_helper_t *helper, double V0, double Ge0,
+inline double get_V_t_acc(struct population_data_t *pop_data, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t)
 {
 	(void)Ge1;
 	(void)Gi1;
 
+	struct neuron_helper_t helper = pop_data->helper;
+	struct neuron_params_t n_params = pop_data->params;
+
 	/* Now compute V(delta_t) and return it */
-	double aux = (V0 - Ge0 * n_params.De - Gi0 * n_params.Di - helper->Q) *
+	double aux = (V0 - Ge0 * n_params.De - Gi0 * n_params.Di - helper.Q) *
 	             exp(-delta_t * n_params.inv_tau_m);
 
 	double expe = exp(-delta_t * n_params.inv_tau_e);
 	double expi = exp(-delta_t * n_params.inv_tau_i);
 
 	return (Ge0 * expe * n_params.De + Gi0 * expi * n_params.Di +
-		helper->Q + aux);
+		helper.Q + aux);
 }
 
-extern double get_V_t_acc(struct neuron_helper_t *helper, double V0, double Ge0,
+extern double get_V_t_acc(struct population_data_t *pop_data, double V0, double Ge0,
     double Ge1, double Gi0, double Gi1, double delta_t);
 
 
 /* Given a neuron, compute how long it takes to spike without external
  * time-dependent inputs */
-double getSelfSpikeTime(struct neuron_helper_t *n_helper)
+double getSelfSpikeTime(struct population_data_t *pop_data)
 {
+	struct neuron_helper_t n_helper = pop_data->helper;
+	struct neuron_params_t n_params = pop_data->params;
+
 	// Check that dV/dt > 0 for V->Vth and ge=gi=0
-	if(n_params.threshold > n_helper->El)
+	if(n_params.threshold > n_helper.El)
 		return -1;
 
 	double delta_t;
@@ -597,7 +589,7 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper)
 	// While Vt is below Vth
 	while(1) {
 		/* Now compute V(delta_t) */
-		Vt = get_V_t_acc(n_helper, n_params.reset_potential, 0, 0, 0, 0,
+		Vt = get_V_t_acc(pop_data, n_params.reset_potential, 0, 0, 0, 0,
 		    tmax);
 
 		if(Vt >= n_params.threshold) {
@@ -616,7 +608,7 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper)
 		//~ printdbg("tmin: %lf, tmax: %lf\n", tmin, tmax);
 		delta_t = (tmax + tmin) / 2;
 		/* Now compute V(delta_t) */
-		Vt = get_V_t_acc(n_helper, n_params.reset_potential, 0, 0, 0, 0,
+		Vt = get_V_t_acc(pop_data, n_params.reset_potential, 0, 0, 0, 0,
 		    delta_t);
 
 
@@ -634,31 +626,30 @@ double getSelfSpikeTime(struct neuron_helper_t *n_helper)
 
 /* Compute the time after which the spike will take place given T0=0 and V0
  * on a self spiking neuron */
-double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
+double findSpikeDeltaBinaryBlind(struct population_data_t *pop_data, double V0,
     double Ge0, double Gi0)
 {
+	struct neuron_helper_t helper = pop_data->helper;
+	struct neuron_params_t n_params = pop_data->params;
+
 	double Vt;
 	double Ge_t;
 	double Gi_t;
 	double tmin = 0;
-	double tmax = helper->self_spike_time * 2;
+	double tmax = helper.self_spike_time * 2;
 
 	// While Vt is below Vth
 	printdbg("FSDBB: Neuron is self spiking\n");
 	while(true) {
 		/* Compute Ge(delta_t) and Gi(delta_t) */
-		Ge_t = get_Ge_f(tmax, Ge0);
-		Gi_t = get_Gi_f(tmax, Gi0);
+		Ge_t = get_Ge_f(n_params.inv_tau_e, tmax, Ge0);
+		Gi_t = get_Gi_f(n_params.inv_tau_i, tmax, Gi0);
 		/* Now compute V(delta_t) */
-		Vt = get_V_t(helper, V0, Ge0, Ge_t, Gi0, Gi_t, tmax);
+		Vt = get_V_t(pop_data, V0, Ge0, Ge_t, Gi0, Gi_t, tmax);
 
 		if(Vt >= n_params.threshold) {
-			//~ printdbg("FSDBB: delta_t: %lf, Vt %lf > Vth %lf\n",
-			// delta_t, Vt, n_params.threshold);
 			break;
 		}
-		//~ printdbg("FSDBB: delta_t: %lf, Vt %lf < Vth %lf\n", delta_t,
-		// Vt, n_params.threshold);
 		tmin = tmax;
 		tmax *= 2;
 	}
@@ -669,18 +660,14 @@ double findSpikeDeltaBinaryBlind(struct neuron_helper_t *helper, double V0,
 		double delta_t = (tmax + tmin) / 2;
 
 		/* Compute Ge(delta_t) and Gi(delta_t) */
-		Ge_t = get_Ge_f(delta_t, Ge0);
-		Gi_t = get_Gi_f(delta_t, Gi0);
+		Ge_t = get_Ge_f(n_params.inv_tau_e, delta_t, Ge0);
+		Gi_t = get_Gi_f(n_params.inv_tau_i, delta_t, Gi0);
 		/* Now compute V(delta_t) */
-		Vt = get_V_t(helper, V0, Ge0, Ge_t, Gi0, Gi_t, delta_t);
+		Vt = get_V_t(pop_data, V0, Ge0, Ge_t, Gi0, Gi_t, delta_t);
 
 		if(Vt > n_params.threshold) {
-			//~ printdbg("Vt %lf > Vth %lf\n", Vt,
-			// n_params.threshold);
 			tmax = delta_t;
 		} else {
-			//~ printdbg("Vt %lf < Vth %lf\n", Vt,
-			// n_params.threshold);
 			tmin = delta_t;
 		}
 		if(tmax <= tmin + T_TOLERANCE) {

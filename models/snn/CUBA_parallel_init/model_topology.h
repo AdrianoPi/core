@@ -18,7 +18,7 @@ typedef struct neuron_params_t{
 } neuron_params_t;
 
 struct neural_population {
-	struct neuron_params_t *parameters;
+	struct neuron_params_t parameters;
 	unsigned population_id; // TODO: Remove?
 	unsigned size; // TODO: Remove if we move this info to population_sizes?
 	bool is_excitatory;

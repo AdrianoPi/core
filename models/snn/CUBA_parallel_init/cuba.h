@@ -18,9 +18,13 @@ struct neuron_helper_t {
 	double self_spike_time; // This is the time the neuron takes to self spike starting with V=Vr and no time-dependent inputs
 };
 
+struct population_data_t {
+	struct neuron_params_t params;
+	struct neuron_helper_t helper;
+};
 
 typedef struct neuron_state_t{
-	struct neuron_helper_t *helper;
+	struct population_data_t *pop_data;
 
 	double membrane_potential; // [mV]
 	double Ge; 		// [pA]
